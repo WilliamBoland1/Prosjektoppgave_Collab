@@ -20,7 +20,10 @@ env/
 .DS_Store
 Thumbs.db
 
-# Data and output (keep large files out of git)
-data/
-output/
+# Data and output: keep the folder structure in git, keep the actual files out
+data/**
+output/**
+!data/**/
+!output/**/
+!**/.gitkeep
 *.log
