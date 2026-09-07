@@ -18,13 +18,13 @@ pip install -r requirements.txt
 ## Working in this repo with two people
 
 **Rule:** `main` is the shared, always-working version. Nobody commits directly to `main`.
-Each of us works on our own branch and merges into `main` through a pull request.
+Each of us works on our own branch and merges it into `main` when it is ready.
 
 | Branch | Owner |
 | --- | --- |
 | `main` | shared — merged code only |
 | `william` | William |
-| `partner` | (rename to the other person's name) |
+| `olve` | Olve |
 
 ### One-time: create your own branch
 
@@ -48,13 +48,22 @@ git push
 
 ### When your work is ready to share
 
-1. Go to the repo on GitHub → **Pull requests** → **New pull request**.
-2. Base: `main` ← compare: your branch. Create the pull request.
-3. The other person looks it over and clicks **Merge**.
-4. Both of us then run `git checkout main && git pull` to get the merged version.
+You merge it into `main` yourself — no approval from the other person needed.
 
-After merging you can keep using the same branch — just remember to `git pull origin main`
-into it before starting new work.
+```bash
+git checkout main
+git pull                      # get whatever the other person has merged
+git merge william             # your own branch
+git push
+git checkout william          # back to your own branch and keep working
+```
+
+Then tell the other person, so they can `git pull origin main` into their branch.
+
+> If you prefer clicking on GitHub instead: Pull requests → New pull request →
+> base `main` ← compare your branch → Create → **Merge pull request**. GitHub only
+> demands a reviewer if branch protection is switched on, and it is off here, so you
+> can merge your own pull request.
 
 ### If you get a merge conflict
 
