@@ -1,8 +1,7 @@
 # Project Structure
 
-This document describes the new file structure and what each file is
-responsible for. The old structure has been kept in `Old_structure/` for
-reference and has not been deleted.
+This document describes the file structure and what each file is
+responsible for.
 
 ## Overview
 
@@ -39,17 +38,24 @@ dp_capability/                          The Python package containing all
 ├── models/                             The actual DP capability
 │   │                                    calculations (physics/math).
 │   ├── __init__.py
-│   ├── environmental_loads.py          Functions computing wind, wave and
-│   │                                    current forces/moments acting on the
-│   │                                    vessel.
+│   ├── windloads.py                    Functions computing wind forces/
+│   │                                    moments on the vessel (currently
+│   │                                    Blendermann's method).
+│   ├── currentloads.py                 Functions computing current forces/
+│   │                                    moments on the vessel.
+│   ├── waveloads.py                    Functions computing wave drift
+│   │                                    forces/moments on the vessel.
 │   ├── thruster_allocation.py          Functions computing available
 │   │                                    thrust/force from the thrusters,
 │   │                                    including any allocation logic.
-│   └── capability.py                   Combines environmental loads and
-│                                        thruster capacity into the DP
-│                                        capability result (e.g. the
-│                                        capability polygon) for a given
-│                                        heading/condition.
+│   ├── capability.py                   Combines environmental loads and
+│   │                                    thruster capacity into the DP
+│   │                                    capability result (e.g. the
+│   │                                    capability polygon) for a given
+│   │                                    heading/condition.
+│   └── Descriptions/                   Markdown write-ups explaining the
+│       └── windloads.md                 theory behind each model and how it
+│                                        maps to the code.
 │
 └── plotting/                           Turning results into figures.
     ├── __init__.py
@@ -69,9 +75,7 @@ output/                                 Generated results: figures, tables,
                                          input data.
 
 tests/                                  Automated tests, mirroring the
-                                         structure of dp_capability/. Each
-                                         module in dp_capability/ has a
-                                         corresponding test file, so
+                                         structure of dp_capability/, so
                                          calculations can be verified
                                          independently of running the full
                                          program.
@@ -80,16 +84,16 @@ tests/                                  Automated tests, mirroring the
 ├── processing/
 │   └── test_clean.py
 ├── models/
-│   ├── test_environmental_loads.py
+│   ├── test_environmental_loads.py     Tests for windloads.py,
+│   │                                    currentloads.py and waveloads.py.
 │   ├── test_thruster_allocation.py
 │   └── test_capability.py
 └── plotting/
     └── test_capability_plot.py
 
-Old_structure/                          Previous project layout, kept for
-                                         reference only. Not part of the new
-                                         structure and should not be imported
-                                         from.
+theory/                                 Local reference material (standards,
+                                         papers). Ignored by git, so each of
+                                         us keeps our own copy.
 ```
 
 ## Guiding principles
@@ -102,7 +106,7 @@ Old_structure/                          Previous project layout, kept for
 - **Config is separate from logic.** Numbers that might change between runs
   (vessel data, environmental assumptions, file paths) live in config.py, not
   scattered inside functions.
-- **tests/ mirrors dp_capability/.** Every module gets a matching test file,
-  making it easy to see what is and isn't covered.
+- **tests/ mirrors dp_capability/.** Every module is covered by a matching
+  test file, making it easy to see what is and isn't covered.
 - **Notebooks (if used) import from dp_capability/** instead of duplicating
   logic, so exploratory work and the reproducible main.py run stay in sync.
