@@ -170,3 +170,54 @@ Two deviations from the raw table, both noted in the code:
   more detailed model — acceptable for a first estimate, but worth
   overriding with vessel-specific data if a drilling vessel's capability is
   the focus of the analysis.
+
+## 5. DP capability Level 1 — `wind_loads_level1(...)`
+
+Blendermann's method above is **not** the DP capability Level 1 method.
+Level 1 is prescriptive ("shall be strictly followed without any deviations",
+DNV-ST-0111 [3.2.1]) and uses the fixed formulas in DNV-ST-0111 [3.5].
+Blendermann is only accepted as a recognized method for Level 2 and Level 3
+([4.6.3], [6.7.1]), so both live side by side in `windloads.py`.
+
+### Coordinate system — differs from Blendermann
+
+DNV-ST-0111 [2.8.2]: `x` forward, `y` to **port** (Blendermann: starboard),
+`z` up, origin at `Lpp/2` on the centreline at the keel. Forces are positive
+pushing the vessel forward / to port, and the yaw moment is positive
+counter-clockwise (bow to port). The wind direction is where the wind is
+coming **from**, clockwise: `0°` = head-on, `90°` = from starboard.
+
+### Formulas
+
+```
+FX = ½ · ρ_air · V² · A_F,wind · (−0.7 · cos(direction))
+FY = ½ · ρ_air · V² · A_L,wind · ( 0.9 · sin(direction))
+MZ = FY · (x_L,air + 0.3 · (1 − 2·dir/π) · Lpp)
+
+dir = direction          for 0 ≤ direction ≤ π
+      2π − direction     for π ≤ direction ≤ 2π
+
+ρ_air = 1.226 kg/m³   (not Blendermann's 1.23)
+```
+
+### Checking the signs
+
+- Head wind (`0°`) gives `FX < 0`: the vessel is pushed aft.
+- Wind from starboard (`0° < direction < 180°`) gives `FY > 0`: the vessel is
+  pushed to port.
+- The centre of pressure `x_L,air + 0.3·(1 − 2·dir/π)·Lpp` moves from
+  `0.3·Lpp` forward of the area centre in head wind to `0.3·Lpp` aft of it in
+  stern wind. Wind on the starboard bow therefore turns the bow to port
+  (`MZ > 0`), and wind on the starboard quarter turns it to starboard
+  (`MZ < 0`).
+- `dir` folds port-side directions onto the starboard side, so the lever arm
+  is the same on both sides, while `sin(direction)` flips the sign of `FY`
+  and therefore of `MZ`.
+
+### In the code
+
+The inputs come from the `Hull` dataclass in `dp_capability/vessel.py`
+(`af_wind`, `al_wind`, `xl_air`, `lpp`), and `ρ_air` and the `dir` fold come
+from `dp_capability/standard.py` (`RHO_AIR`, `fold_direction`). Unlike the
+Blendermann functions, it returns actual forces [N] and moment [Nm], not
+coefficients to multiply by `V²`.

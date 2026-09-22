@@ -27,6 +27,13 @@ dp_capability/                          The Python package containing all
                                          (plots, tables) to output/. Nothing
                                          outside this file should open a file
                                          directly.
+├── standard.py                         Everything DNV-ST-0111 fixes for all
+                                         vessels: coordinate conventions,
+                                         densities, dynamic factor, the Table
+                                         2-1 Beaufort environment.
+├── vessel.py                           Data containers for vessel input
+                                         (e.g. Hull = Table A-2). The values
+                                         for a vessel live in config.py.
 │
 ├── processing/                         Data cleaning and preparation.
 │   ├── __init__.py
@@ -81,6 +88,7 @@ tests/                                  Automated tests, mirroring the
                                          program.
 ├── __init__.py
 ├── test_io_utils.py
+├── test_standard.py
 ├── processing/
 │   └── test_clean.py
 ├── models/

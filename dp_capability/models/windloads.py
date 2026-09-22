@@ -1,5 +1,7 @@
 import numpy as np
 
+from dp_capability.standard import RHO_AIR, fold_direction
+
 AIR_DENSITY = 1.23  # kg/m^3, value used in Blendermann (1994)
 
 # Blendermann (1994), Table 1: reference wind load parameters per vessel type.
@@ -139,6 +141,43 @@ def blendermann_wind_coefficients(vessel_type, loa, area_lateral, area_frontal, 
     ck = ck_nd * q_per_v2 * area_lateral * h_m
 
     return cx, cy, cn, ck
+
+
+def wind_loads_level1(hull, wind_speed, direction_deg):
+    """
+    Wind forces and yaw moment for DP capability level 1, DNV-ST-0111 [3.5].
+
+    Uses the standard's body frame and sign convention (x forward, y to port,
+    yaw positive counter-clockwise, see dp_capability/standard.py). Note that
+    this differs from Blendermann's frame used above, where y points to
+    starboard.
+
+    Parameters
+    ----------
+    hull : dp_capability.vessel.Hull
+        Vessel hull data; uses af_wind, al_wind, xl_air and lpp.
+    wind_speed : float or array-like
+        Mean wind speed 10 m above sea level [m/s].
+    direction_deg : float or array-like
+        Direction the wind is coming from, clockwise: 0 deg = head-on,
+        90 deg = from starboard. Values outside 0-360 deg are wrapped. Can be
+        a numpy array, e.g. to evaluate all headings of an envelope at once.
+
+    Returns
+    -------
+    fx, fy, mz
+        Surge force [N], sway force [N] and yaw moment [Nm].
+    """
+    direction = np.deg2rad(np.mod(direction_deg, 360.0))
+    q = 0.5 * RHO_AIR * np.asarray(wind_speed, dtype=float) ** 2
+
+    fx = q * hull.af_wind * (-0.7 * np.cos(direction))
+    fy = q * hull.al_wind * (0.9 * np.sin(direction))
+    # The centre of pressure moves from 0.3*Lpp forward of xl_air in head wind
+    # to 0.3*Lpp aft of it in stern wind, the same on both sides of the vessel.
+    mz = fy * (hull.xl_air + 0.3 * (1 - 2 * fold_direction(direction) / np.pi) * hull.lpp)
+
+    return fx, fy, mz
 
 
 
