@@ -65,9 +65,11 @@ dp_capability/                          The Python package containing all
 │   ├── thrust.py                       Nominal and effective thrust of one
 │   │                                    actuator ([3.9]): Tables 3-1 to 3-4
 │   │                                    and beta_misc.
-│   ├── thruster_allocation.py          Thrust allocation ([3.11]):
-│   │                                    distributing the thrusters' forces
-│   │                                    to balance the environmental load.
+│   ├── thruster_allocation.py          Thrust allocation ([2.4.4],
+│   │                                    [3.11.1]): thruster forces that
+│   │                                    balance one environmental load in
+│   │                                    surge, sway and yaw (two linear
+│   │                                    programs), and the utilisation.
 │   ├── capability.py                   Combines environmental loads and
 │   │                                    thruster capacity into the DP
 │   │                                    capability result (e.g. the
@@ -77,7 +79,8 @@ dp_capability/                          The Python package containing all
 │       ├── windloads.md                 theory behind each model and how it
 │       ├── currentloads.md              maps to the code.
 │       ├── waveloads.md
-│       └── thrust.md
+│       ├── thrust.md
+│       └── thruster_allocation.md
 │
 └── plotting/                           Turning results into figures.
     ├── __init__.py
@@ -111,7 +114,7 @@ tests/                                  Automated tests, mirroring the
 │   │                                    currentloads.py, waveloads.py and
 │   │                                    environmental_loads.py.
 │   ├── test_thrust.py                  Tests for thrust.py.
-│   ├── test_thruster_allocation.py
+│   ├── test_thruster_allocation.py     Tests for thruster_allocation.py.
 │   └── test_capability.py
 └── plotting/
     └── test_capability_plot.py
