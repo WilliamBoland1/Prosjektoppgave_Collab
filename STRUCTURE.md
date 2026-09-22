@@ -29,8 +29,9 @@ dp_capability/                          The Python package containing all
                                          directly.
 ├── standard.py                         Everything DNV-ST-0111 fixes for all
                                          vessels: coordinate conventions,
-                                         densities, dynamic factor, the Table
-                                         2-1 Beaufort environment.
+                                         densities, g, Tp/Tz ratio, dynamic
+                                         factor, the Table 2-1 Beaufort
+                                         environment.
 ├── vessel.py                           Data containers for vessel input
                                          (e.g. Hull = Table A-2). The values
                                          for a vessel live in config.py.
@@ -46,12 +47,19 @@ dp_capability/                          The Python package containing all
 │   │                                    calculations (physics/math).
 │   ├── __init__.py
 │   ├── windloads.py                    Functions computing wind forces/
-│   │                                    moments on the vessel (currently
-│   │                                    Blendermann's method).
+│   │                                    moments on the vessel: Level 1
+│   │                                    ([3.5]) and Blendermann's method
+│   │                                    (Level 2/3).
 │   ├── currentloads.py                 Functions computing current forces/
-│   │                                    moments on the vessel.
+│   │                                    moments on the vessel (Level 1,
+│   │                                    [3.6]).
 │   ├── waveloads.py                    Functions computing wave drift
-│   │                                    forces/moments on the vessel.
+│   │                                    forces/moments on the vessel
+│   │                                    (Level 1, [3.7]).
+│   ├── environmental_loads.py          Total Level 1 environmental load for
+│   │                                    a DP capability number: wind +
+│   │                                    current + waves from Table 2-1,
+│   │                                    times the dynamic factor 1.25.
 │   ├── thruster_allocation.py          Functions computing available
 │   │                                    thrust/force from the thrusters,
 │   │                                    including any allocation logic.
@@ -61,8 +69,9 @@ dp_capability/                          The Python package containing all
 │   │                                    capability polygon) for a given
 │   │                                    heading/condition.
 │   └── Descriptions/                   Markdown write-ups explaining the
-│       └── windloads.md                 theory behind each model and how it
-│                                        maps to the code.
+│       ├── windloads.md                 theory behind each model and how it
+│       ├── currentloads.md              maps to the code.
+│       └── waveloads.md
 │
 └── plotting/                           Turning results into figures.
     ├── __init__.py
@@ -93,7 +102,8 @@ tests/                                  Automated tests, mirroring the
 │   └── test_clean.py
 ├── models/
 │   ├── test_environmental_loads.py     Tests for windloads.py,
-│   │                                    currentloads.py and waveloads.py.
+│   │                                    currentloads.py, waveloads.py and
+│   │                                    environmental_loads.py.
 │   ├── test_thruster_allocation.py
 │   └── test_capability.py
 └── plotting/
