@@ -31,10 +31,12 @@ dp_capability/                          The Python package containing all
                                          vessels: coordinate conventions,
                                          densities, g, Tp/Tz ratio, dynamic
                                          factor, the Table 2-1 Beaufort
-                                         environment.
+                                         environment, the thrust efficiency
+                                         Tables 3-1 to 3-4 and beta_misc.
 ├── vessel.py                           Data containers for vessel input
-                                         (e.g. Hull = Table A-2). The values
-                                         for a vessel live in config.py.
+                                         (Hull = Table A-2, Thruster =
+                                         Table A-3). The values for a vessel
+                                         live in config.py.
 │
 ├── processing/                         Data cleaning and preparation.
 │   ├── __init__.py
@@ -60,9 +62,12 @@ dp_capability/                          The Python package containing all
 │   │                                    a DP capability number: wind +
 │   │                                    current + waves from Table 2-1,
 │   │                                    times the dynamic factor 1.25.
-│   ├── thruster_allocation.py          Functions computing available
-│   │                                    thrust/force from the thrusters,
-│   │                                    including any allocation logic.
+│   ├── thrust.py                       Nominal and effective thrust of one
+│   │                                    actuator ([3.9]): Tables 3-1 to 3-4
+│   │                                    and beta_misc.
+│   ├── thruster_allocation.py          Thrust allocation ([3.11]):
+│   │                                    distributing the thrusters' forces
+│   │                                    to balance the environmental load.
 │   ├── capability.py                   Combines environmental loads and
 │   │                                    thruster capacity into the DP
 │   │                                    capability result (e.g. the
@@ -71,7 +76,8 @@ dp_capability/                          The Python package containing all
 │   └── Descriptions/                   Markdown write-ups explaining the
 │       ├── windloads.md                 theory behind each model and how it
 │       ├── currentloads.md              maps to the code.
-│       └── waveloads.md
+│       ├── waveloads.md
+│       └── thrust.md
 │
 └── plotting/                           Turning results into figures.
     ├── __init__.py
@@ -104,6 +110,7 @@ tests/                                  Automated tests, mirroring the
 │   ├── test_environmental_loads.py     Tests for windloads.py,
 │   │                                    currentloads.py, waveloads.py and
 │   │                                    environmental_loads.py.
+│   ├── test_thrust.py                  Tests for thrust.py.
 │   ├── test_thruster_allocation.py
 │   └── test_capability.py
 └── plotting/

@@ -8,7 +8,7 @@ vessel can be entered in DNV's Veracity DP capability app for comparison.
 """
 import math
 
-from dp_capability.vessel import Hull
+from dp_capability.vessel import Hull, Thruster
 
 HULL = Hull(
     loa=88.0,
@@ -30,4 +30,19 @@ HULL = Hull(
     al_current=490.0,
     xl_current=-1.5,
     skegs=((-36.0, 0.0),),
+)
+
+# A typical PSV layout: two azimuths aft, two bow tunnels and a retractable
+# azimuth forward. power_kw is the documented DP power with torque limits, so
+# the 50%-of-MCR fallback of [3.9.2] guidance note 3 does not apply. The two
+# tunnels have different inlets and the retractable azimuth is open (real ones
+# are usually ducted), so that a comparison with Table A-3 in Veracity covers
+# several rows of Tables 3-1 to 3-3.
+THRUSTERS = (
+    Thruster("AZ1", "azimuth", diameter=3.0, power_kw=2000.0, x=-40.0, y=5.5, z=1.8, ducted=True),
+    Thruster("AZ2", "azimuth", diameter=3.0, power_kw=2000.0, x=-40.0, y=-5.5, z=1.8, ducted=True),
+    Thruster("BT1", "tunnel", diameter=2.0, power_kw=900.0, x=31.0, y=0.0, z=2.5, pitch="CPP", tunnel_inlet="rounded"),
+    Thruster("BT2", "tunnel", diameter=2.0, power_kw=900.0, x=28.0, y=0.0, z=2.5, pitch="CPP", tunnel_inlet="broken"),
+    # Lowered below the keel when in use, hence z < 0.
+    Thruster("RAZ", "azimuth", diameter=1.8, power_kw=800.0, x=22.0, y=0.0, z=-1.5),
 )

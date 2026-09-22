@@ -27,3 +27,32 @@ class Hull:
     al_current: float  # longitudinal projected area below water, A_L,current [m^2]
     xl_current: float  # longitudinal position of the area centre of al_current [m]
     skegs: tuple[tuple[float, float], ...] = ()  # (x, y) of the aftmost point of each skeg/gondola [m]
+
+
+@dataclass(frozen=True)
+class Thruster:
+    """
+    Actuator data as listed in DNV-ST-0111 Table A-3. SI units, except the
+    power, which is in kW like the standard's nominal thrust formula [3.9.2].
+    """
+
+    name: str  # identification, e.g. "BT1"
+    kind: str  # "azimuth", "pod", "shaft_line", "tunnel", "cycloidal" or "water_jet"
+    # Propeller diameter D [m]. [3.9.2] defines it for special actuators: the
+    # blade tip circle for permanent magnet tunnel thrusters, the largest
+    # propeller for contra-rotating units and pods with a propeller at each
+    # end, and sqrt(blade length * blade pivot circle diameter) for cycloidals.
+    diameter: float
+    # P_B: MCR brake power available in DP mode/bollard pull, with power and
+    # torque limits taken into account [kW], see [3.9.2] guidance note 3.
+    power_kw: float
+    # Position [m] as defined in [3.8.3], e.g. the volume centre of a tunnel
+    # or the intersection of propeller shaft and azimuthing axis.
+    x: float
+    y: float
+    z: float
+    pitch: str = "FPP"  # fixed ("FPP") or controllable ("CPP") pitch propeller
+    ducted: bool = False
+    permanent_magnet: bool = False
+    contra_rotating: bool = False
+    tunnel_inlet: str | None = None  # "broken", "rounded" or "other", Table 3-2; tunnels only

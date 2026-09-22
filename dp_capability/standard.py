@@ -29,6 +29,38 @@ G = 9.81
 TZ_FROM_TP = 1.4049  # Tp = 1.4049 * Tz for Pierson-Moskowitz with cos^2 spreading, [3.3.3]
 DYNAMIC_FACTOR_LEVEL1 = 1.25  # applied to wind, current and wave loads, [3.2.2]
 
+# Efficiency factors for the nominal thrust formula of [3.9.2]. Which row
+# applies to a given thruster is decided in dp_capability/models/thrust.py.
+ETA1 = {  # Table 3-1
+    "propeller": 800.0,  # azimuths, pods and shaft line propellers
+    "cycloidal": 900.0,  # cycloidal actuators
+    "tunnel": 900.0,  # tunnel thrusters
+    "contra_rotating": 950.0,  # contra-rotating azimuths, pods and shaft line propellers
+    "ducted": 1200.0,  # ducted azimuths, pods and shaft line propellers
+}
+ETA2_TUNNEL = {  # Table 3-2, tunnel thrusters, by inlet shape (Figure 3-4)
+    "broken": 1.0,  # broken inlets with alpha in [20, 50] deg and b > 0.1D
+    "rounded": 1.07,  # rounded inlet with r > 0.05D
+    "other": 0.93,  # all other inlet shapes
+}
+ETA2_FORWARD = 1.0  # Table 3-3, forward thrust
+ETA2_REVERSED = {  # Table 3-3, reversed thrust, keyed by (pitch, ducted)
+    ("FPP", False): 0.9,
+    ("FPP", True): 0.7,
+    ("CPP", False): 0.65,
+    ("CPP", True): 0.5,
+}
+ETA_M = {  # Table 3-4, mechanical efficiency
+    "cycloidal": 0.91,  # cycloidal actuators
+    "pm_cycloidal": 0.97,  # permanent magnet cycloidal actuators
+    "tunnel": 0.93,  # tunnel and azimuth thrusters
+    "azimuth": 0.93,
+    "rim_driven_pm": 0.995,  # rim-driven permanent magnet actuators
+    "shaft_line": 0.97,  # shaft line propellers
+    "pod": 0.98,  # pods
+}
+BETA_MISC = 0.9  # constant 10% thrust loss, [3.9.3]
+
 
 @dataclass(frozen=True)
 class BeaufortCondition:
