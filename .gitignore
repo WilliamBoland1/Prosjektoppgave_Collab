@@ -10,7 +10,22 @@ venv.bak/
 # Python cache
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
 #Theory folder
 theory/
 
+# The DNV standard is copyrighted, so keep it out of git even if it lands in the repo root
+DNV-ST-0111*.pdf
+
+# Generated plots and results (can be recreated with main.py)
+output/*
+!output/.gitkeep
+
+# OS clutter
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Local Claude Code permissions (per machine, not shared)
+.claude/settings.local.json
