@@ -70,17 +70,19 @@ dp_capability/                          The Python package containing all
 │   │                                    balance one environmental load in
 │   │                                    surge, sway and yaw (two linear
 │   │                                    programs), and the utilisation.
-│   ├── capability.py                   Combines environmental loads and
-│   │                                    thruster capacity into the DP
-│   │                                    capability result (e.g. the
-│   │                                    capability polygon) for a given
-│   │                                    heading/condition.
+│   ├── capability.py                   DP capability number per heading
+│   │                                    ([2.2.2], [2.4.4]): steps up
+│   │                                    through Table 2-1 until the first
+│   │                                    condition the thrusters cannot
+│   │                                    balance. Also the limiting wind
+│   │                                    speed [m/s] for the plots.
 │   └── Descriptions/                   Markdown write-ups explaining the
 │       ├── windloads.md                 theory behind each model and how it
 │       ├── currentloads.md              maps to the code.
 │       ├── waveloads.md
 │       ├── thrust.md
-│       └── thruster_allocation.md
+│       ├── thruster_allocation.md
+│       └── capability.md
 │
 └── plotting/                           Turning results into figures.
     ├── __init__.py

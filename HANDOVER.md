@@ -26,8 +26,8 @@ covered by hand-calculated tests. Level 1 is prescriptive: the formulas
 | 3 | Wave drift loads + total factored load (`environmental_loads_level1`) | §3.7, §3.2.2 | done |
 | 4 | Nominal thrust + β_misc, `Thruster` (Table A-3), test thruster set | §3.9.1–3.9.3 | done |
 | 5 | Force/moment balance (thrust allocation) at one heading | §2.4.4, §3.8.2, §3.11.1 | done |
-| 6 | Sweep headings × BF → first real capability plot (**first milestone**) | §2.4, §2.2.2 | **next** |
-| 7 | Refinements: ventilation, rudders, flushing/skeg losses, forbidden zones, power | §3.9.4, §3.10, §3.11.2–5, §3.12 | |
+| 6 | Sweep headings × BF → first real capability plot (**first milestone**) | §2.4, §2.2.2 | done |
+| 7 | Refinements: ventilation, rudders, flushing/skeg losses, forbidden zones, power | §3.9.4, §3.10, §3.11.2–5, §3.12 | **next** |
 | 8 | Redundancy groups, worst single failure, `DP capability-L1(A,B,C,D)`, report tables | §2.4.7–2.5, App. A | |
 
 Steps 2–3 complete the **load side** of Level 1: for any heading and any
@@ -47,7 +47,17 @@ returns the utilisation u (balanced if u ≤ 1), the force and [3.8.2] angle per
 actuator. The standard prescribes no allocation method (§3.11.1 guidance note);
 ours is two linear programs, see §7 and `Descriptions/thruster_allocation.md`.
 
-**Tests:** 121 passing (`tests/test_standard.py`: 7, `tests/models/test_environmental_loads.py`: 51, `tests/models/test_thrust.py`: 43, `tests/models/test_thruster_allocation.py`: 20).
+Step 6 gives the **first real capability plot** (the first milestone).
+- `capability_numbers_level1(hull, thrusters, headings_deg)` steps each heading up from BF 1 until the first BF that doesn't balance ([2.2.2], [2.4.4]).
+- `limiting_wind_speed_level1(numbers)` gives the m/s value: the Table 2-1 wind speed of each number (decided with William, §7).
+- `main.py` now runs config → numbers → the two polar plots of [2.4.2].
+- The test vessel gets:
+  - BF 7 (17.1 m/s) over 60–100° and 260–300°;
+  - BF 11 head-on and astern;
+  - 7 as the lowest number over 360°, and 9 as the lowest within ±30° of the bow.
+- The full table is in `Descriptions/capability.md` §3.
+
+**Tests:** 134 passing (`tests/test_standard.py`: 7, `tests/models/test_environmental_loads.py`: 51, `tests/models/test_thrust.py`: 43, `tests/models/test_thruster_allocation.py`: 20, `tests/models/test_capability.py`: 9, `tests/plotting/test_capability_plot.py`: 4). Matplotlib's import prints 14 pyparsing deprecation warnings; they don't come from our code.
 
 ## 3. Conventions: read before writing any formula
 
@@ -79,17 +89,18 @@ it into the Level 1 chain.
 |---|---|
 | `dp_capability/standard.py` | The conventions docstring and constants. `BeaufortCondition` + `ENVIRONMENT_TABLE` (Table 2-1, BF 0–11; BF 0 has `tp = nan`). `environment(bf)` raises ValueError outside 0–11. `fold_direction()`. Tables 3-1 to 3-4 as dicts, `BETA_MISC` |
 | `dp_capability/vessel.py` | `Hull` frozen dataclass matching Table A-2: `loa, lpp, draft, breadth, los, x_los, bow_angle [rad], aw_laft, af_wind, al_wind, xl_air, af_current, al_current, xl_current, skegs`. `Thruster` frozen dataclass matching Table A-3: `name, kind, diameter, power_kw, x, y, z, pitch="FPP", ducted, permanent_magnet, contra_rotating, tunnel_inlet` |
-| `dp_capability/config.py` | `HULL`: a made-up ~80 m OSV. `THRUSTERS`: its five actuators (both below) |
+| `dp_capability/config.py` | `HULL`: a made-up ~80 m OSV. `THRUSTERS`: its five actuators (both below). `HEADINGS_DEG`: 0–350° in 10° steps ([2.4.6]) |
 | `dp_capability/models/thrust.py` | `nominal_thrust(thruster, reverse=False)` [N] and `effective_thrust(thruster, reverse=False, beta_t=BETA_MISC)` [N]. Row pickers `_eta1`, `_eta2`, `_eta_m` (rules in §7). Plain floats, nothing here depends on direction |
 | `dp_capability/models/windloads.py` | Blendermann (unchanged) + `wind_loads_level1(hull, wind_speed, direction_deg) -> (fx, fy, mz)` |
 | `dp_capability/models/currentloads.py` | `current_loads_level1(hull, current_speed, direction_deg) -> (fx, fy, mz)`. FX uses `breadth · draft` (Level 1 does not use `af_current`); lever factor clipped to [−0.2, 0.25] |
 | `dp_capability/models/waveloads.py` | `wave_loads_level1(hull, hs, tp, direction_deg) -> (fx, fy, mz)` and the helper `_period_factor()` = f(T'). Returns exactly 0 where `hs == 0` (BF 0 has `tp = nan`) |
 | `dp_capability/models/environmental_loads.py` | `environmental_loads_level1(hull, bf, direction_deg, dynamic_factor=1.25)`: looks up Table 2-1, sums wind + current + waves, multiplies by the dynamic factor |
 | `dp_capability/models/thruster_allocation.py` | `allocate_thrust(thrusters, load, n_sides=36) -> Allocation` for **one** heading (not vectorized). `Allocation` has `fx`, `fy` per actuator [N], `utilisation`, and the properties `feasible` (u ≤ 1 + `TOLERANCE`) and `angle_deg` ([3.8.2], nan when idle). Helpers `_capacity_rows`, `_solve` |
-| `dp_capability/models/Descriptions/` | Theory write-ups: `windloads.md` (§5 = Level 1), `currentloads.md`, `waveloads.md`, `thrust.md`, `thruster_allocation.md`. Formulas, sign checks, worked examples, code mapping |
-| `dp_capability/plotting/capability_plot.py` | `plot_envelope()` polar plot, north-up and clockwise, which matches §2.8.2. Still takes the old list-of-lists sample format |
-| `main.py` | Still plots fake sample data; not connected to the models yet |
-| `capability.py`, `io_utils.py`, `processing/clean.py` | Empty |
+| `dp_capability/models/capability.py` | `capability_numbers_level1(hull, thrusters, headings_deg) -> int array` (0–11, same shape as the headings; stops per heading at the first failing BF). `limiting_wind_speed_level1(numbers) -> float array` [m/s] = Table 2-1 wind speed, `ValueError` outside 0–11 |
+| `dp_capability/models/Descriptions/` | Theory write-ups: `windloads.md` (§5 = Level 1), `currentloads.md`, `waveloads.md`, `thrust.md`, `thruster_allocation.md`, `capability.md`. Formulas, sign checks, worked examples, code mapping |
+| `dp_capability/plotting/capability_plot.py` | `plot_envelope(headings_deg, values, title=None, r_max=None) -> (fig, ax)`: polar plot, north-up and clockwise ([2.8.2]), loop closed back to the first heading |
+| `main.py` | config → `capability_numbers_level1` → two plots: DP capability number (r_max 11) and limiting wind speed (r_max 32.6 m/s) |
+| `io_utils.py`, `processing/clean.py` | Empty |
 
 ### Test vessel `config.HULL` (fictional)
 
@@ -138,46 +149,75 @@ fallback doesn't apply.
   - The earlier rough estimate of "BF 8" added up all sway thrust (≈ 1000 kN) and ignored the moment balance.
   - The forward group (BT1, BT2, RAZ: 324 kN at x ≈ 27.5 m) has to match the moment of the aft azimuths at x = −40 m. Even a pure 664 kN sway load with no moment gives u = 1.055.
   - Worked example with all forces: `Descriptions/thruster_allocation.md` §3.
+- **The whole envelope** (step 6):
+  - BF 11 at 0–10°, 160–200° and 350°;
+  - BF 7 over 60–100° and 260–300°;
+  - symmetric port/starboard.
+  - Close calls: at 50° BF 8 balances with u = 0.996, and at 130° BF 9 fails with u = 1.002. The 130° result stays the same with a 360-gon.
+  - Table: `Descriptions/capability.md` §3.
 - **Step-7 losses will apply to this set:**
   - The aft azimuths are 4 m aft and 5.5 m outboard of the skeg's aftmost point (−36, 0), so the skeg losses of §3.11.5 apply.
   - They are also 11 m apart (< 15D), so the flushing rules of §3.11.3 apply.
 
-## 5. Next step: sweep headings × BF → first capability plot (§2.4, §2.2.2)
+## 5. Next step: refinements (step 7, §3.9.4–§3.12)
 
-This is the **first milestone**: a real DP capability plot for `config.HULL` with `config.THRUSTERS`.
+Step 7 adds everything Level 1 prescribes on top of β_misc. It is too big
+for one step, so do it **one section at a time**, in this order. For each part:
+- render the formula pages first (most of §3.9.4–§3.11.6 are images);
+- show the crops next to any transcription before writing code.
 
-- **What the standard asks:**
-  - §2.2.2: the DP capability number means station keeping holds in that BF's condition **and all conditions below**, but not in the next one.
-  - §2.4.4: start with the lowest environment and step up until the first limiting condition.
-  - §2.4.6: at least 10° resolution over the full 360°. So use 36 headings, 0–350°.
-- **Per heading:** try BF 1, 2, … 11. The capability number is the last BF before the first one with `allocate_thrust(...).feasible == False`. If every BF balances, it is 11; if BF 1 already fails, it is 0. BF 0 always balances (u = 0).
-- **Building blocks:**
-  - `environmental_loads_level1(hull, bf, headings)` is vectorized over direction, so one call per BF gives the loads for all 36 headings.
-  - `allocate_thrust(thrusters, (fx[i], fy[i], mz[i]))` is **not** vectorized: loop over headings. All 12 BF × 36 headings take about 0.9 s, so stopping early at the first failure is optional.
-  - The load elements come back as numpy scalars; `allocate_thrust` accepts them.
-- **Where the code goes:** `dp_capability/models/capability.py` (empty now), e.g. `capability_numbers_level1(hull, thrusters, headings_deg) -> int array`. Tests go in `tests/models/test_capability.py`, with their own hull and thrusters.
-- **Plot:** change `plot_envelope()` to take (headings, values) instead of the sample list format. Then connect `main.py`: config → capability numbers → plot.
-- **Expected result for the test vessel:** BF 7 at 90° and 270° (§4). The envelope should be port/starboard symmetric (`number(360 − θ) == number(θ)`), which is a good test.
-- **Test ideas:**
-  - A thruster set too weak for BF 1 gives 0 everywhere.
-  - A very strong set gives 11 everywhere.
-  - Symmetry, as above.
-  - The number never exceeds a BF that fails.
-- **Also §2.4.2:** a plot in limiting wind speed [m/s] is required too. How to get m/s between Table 2-1 rows is still open (§7). The simplest first version plots the Table 2-1 wind speed of the capability number.
+The text of pages 32–40 was skimmed on 2026-09-22 to plan this.
+
+- **7a. Ventilation, §3.9.4 + §3.9.5 (start here).**
+  - What it depends on:
+    - ξ = draft − z (submergence, positive when submerged) and D;
+    - σ, the relative vertical motion, from Hs, Tz, the thruster's x and the wave direction;
+    - T_Nominal;
+    - the constants k_V1…k_V5 = 2, 1.5, 15.2, 0.85, 0.38 (text on p. 33; check the crop).
+  - It uses Φ = the standard normal CDF (`scipy.stats.norm.cdf`), and its `B` term wants the direction in [−π, π].
+  - β_vent depends on the BF and heading, but **not on the thrust direction**. So the capacity sets stay convex and the two LPs still work.
+  - API change: `allocate_thrust` needs a per-thruster β. Today `_capacity_rows()` calls `effective_thrust(thruster)` with the default β_misc. `capability_numbers_level1` then passes β_T = β_misc · β_vent per (BF, heading).
+  - **Settle the open T_Nominal question with William first** (§7).
+    - p. 33 defines it as "Actuator nominal thrust (thrust before losses)".
+    - The change log on p. 3 says the new formula accounts for "the propeller load".
+    - If it is the commanded thrust, β_vent depends on the allocation, which needs an iteration.
+- **7b. Forbidden sectors, §3.11.3 + §3.11.2.**
+  - §3.11.3: a thruster may not flush a *working* thruster closer than 15D (D of the flushing thruster), unless the flushed one is a tunnel. The sector half-angle is a formula on p. 36 (image).
+  - §3.11.2: user-given forbidden zones (Table A-6), which need a new input field.
+  - Both take a sector out of an azimuth's range, so the problem becomes **non-convex**. Choose the method here: `scipy.optimize.milp`, or split each range into convex sectors and solve one LP per combination. `_capacity_rows()` is where each actuator's set is built.
+  - For `config.THRUSTERS`: AZ1 and AZ2 are 11 m apart (< 15D = 45 m), so each has a sector pointing at the other. RAZ is ~62 m from them, outside 15D both ways.
+- **7c. Skeg losses, §3.11.5 + total β_T, §3.11.6.**
+  - The loss depends on the thrust direction, from Tables 3-7/3-8 (images, p. 37–38), with linear interpolation in *polar* coordinates between the listed directions.
+  - It applies to thrusters above the base line (not tunnels) closer than 15D (open) or 8D (ducted) to the skeg plane and not directly behind it.
+  - The aft azimuths of `config` are 4 m aft and 5.5 m outboard of the skeg end (−36, 0), so it applies to them.
+  - It builds on 7b's non-convex machinery.
+  - §3.11.6: β_T = β_misc · β_vent · β_flushing,dead · β_flushing,skeg. Factors that don't apply are 1.
+- **7d. Rudders, §3.10.**
+  - Only for a rudder behind a propeller giving positive thrust; with negative thrust it is ignored (§3.10.2).
+  - α is in degrees and capped at 30°. Tables 3-5 (k1) and 3-6 (k2).
+  - Needs rudder data (area A_r with chord ≤ 1.0D, profile, nozzle) on the thruster.
+  - `config` has no shaft lines, so the tests need their own layout.
+- **7e. Power, §3.12.**
+  - Operating mode, switchboards and generators (Table A-5).
+  - 10% of generated power reserved per redundancy group, with electrical losses included in it (§3.12.3–3.12.4).
+  - Batteries: 80–20% SOC for at least 30 min (§3.12.2).
+  - Needs new input data and overlaps with step 8's redundancy groups, so it may fit better there.
+
+**Keep in mind:** numbers near the margin (the test vessel at 50° and 130°, §4)
+are the first to drop once losses come in. Rerun `main.py` after each sub-step
+and record the envelope.
 
 ## 6. Later steps: notes and gotchas
-
-**Step 7: refinements**
-- The direction-dependent losses and forbidden zones make the allocation non-convex. At that point, move to `scipy.optimize.milp`, or split each thruster's range into convex sectors and solve one LP per combination. `_capacity_rows()` in `thruster_allocation.py` is where each actuator's set is built.
-- Ventilation (§3.9.4) uses Φ = the standard normal CDF (`scipy.stats.norm.cdf`), and its `B` term wants the direction in [−π, π].
-- Total loss factor: β_T = β_misc · β_vent · β_flushing,dead · β_flushing,skeg (§3.11.6).
-- Rudders (§3.10): only count when behind positive thrust; α in degrees, capped at 30°.
-- Power (§3.12): reserve 10% of generated power per redundancy group. Electrical losses are included in that 10%.
 
 **Step 8: capability numbers**
 - A = lowest BF within ±30° (intact). B = lowest over 0–360° (intact).
 - C and D are the same for the worst single failure. They are NA for non-redundant systems.
 - Combined worst-failure plot = the lowest value per heading across all redundancy groups (§2.4.7).
+- A and B can already be read from `capability_numbers_level1`: 9 and 7 for the test vessel (step 6).
+- §3.11.4 (flushing a *dead* thruster) belongs here, since dead thrusters only exist in failure cases.
+  - A dead tunnel may be flushed.
+  - Other dead thrusters closer than 8D (open) or 4D (ducted) give an extra loss, interpolated in Cartesian coordinates (Figure 3-6).
+- Table A-7 (loads per heading at its number) and Table A-8 (thruster forces) can be built from `environmental_loads_level1` and `allocate_thrust` at each heading's number.
 
 ## 7. Decisions and open questions
 
@@ -199,10 +239,18 @@ Decided:
   - **Tunnels** push along ±y. **Shaft lines** push along ±x with reversed thrust aft; rudders come in step 7.
   - **Feasible means u ≤ 1 + 10⁻⁶** (`TOLERANCE`). Pass 2 may use the same slack.
   - An unreachable load (e.g. tunnels only against surge) gives u = ∞ and `nan` forces, not an exception.
+- **DP capability number** (`capability.py`, [2.2.2], [2.4.4]):
+  - Each heading steps up from BF 1 and **stops at the first BF that fails**. The number is the BF before it.
+  - u is not assumed to rise monotonically with BF, so a higher BF that happens to balance never counts.
+  - BF 0 isn't tried (zero load). The cap is 11.
+  - Headings are the run setting `config.HEADINGS_DEG` (0–350° in 10° steps, the [2.4.6] minimum).
+- **Limiting wind speed for Level 1 = the Table 2-1 wind speed of the DP capability number** (agreed with William, 2026-09-22).
+  - There is no interpolation between rows: Level 1 defines wind, current and waves together only at the Table 2-1 rows, and interpolating would add to the prescriptive method (§3.2.1).
+  - The m/s plot therefore has the same shape as the number plot.
+- **Plots** (`plot_envelope`): the loop is closed back to the first heading, with straight lines between points ([2.4.6] allows linear interpolation for visualization). `r_max` is fixed at 11 / 32.6 m/s in `main.py`, so envelopes stay comparable between runs.
 
 Open:
-- `T_Nominal` in the ventilation formula: maximum nominal thrust or the commanded thrust?
-- Limiting wind speed in m/s between Table 2-1 rows (needed for the m/s plot): which interpolation?
+- `T_Nominal` in the ventilation formula: maximum nominal thrust or the commanded thrust? See §5, 7a.
 - `Hull.bow_angle` is an input for now; it could be derived from waterline geometry later.
 - `tests/models/test_environmental_loads.py` holds wind, current, wave and total-load tests together (51 tests). Split it per module if it gets harder to navigate.
 
@@ -223,7 +271,7 @@ defined) and compare step by step:
 - **Table A-3** (nominal thrust) for step 4. Can be done now: enter `config.THRUSTERS` and compare against the T_nom column in §4 (377.52 / 377.52 / 135.77 / 126.89 / 97.20 kN). Table A-3 shows one value per thruster, presumably forward;
 - **Table A-8** (thruster forces) for steps 5–7.
   - The §3.11.1 guidance note allows the analysis allocation to differ from the DP system's, and Veracity's method is unknown. Individual thruster forces may therefore differ from ours even when both are right.
-  - Compare the DP capability numbers per heading first (step 6). Then, where the numbers agree, compare which thrusters are at the limit. For the test vessel at beam, our forward group (BT1, BT2, RAZ) saturates first.
+  - Compare the DP capability numbers per heading first. They exist since step 6: run `main.py`, or see the table in `Descriptions/capability.md` §3. Note that Veracity includes the step-7 losses, so expect our intact numbers to be equal or higher until step 7 is done. Then, where the numbers agree, compare which thrusters are at the limit. For the test vessel at beam, our forward group (BT1, BT2, RAZ) saturates first.
 
 ## 9. Environment and workflow
 

@@ -46,3 +46,7 @@ THRUSTERS = (
     # Lowered below the keel when in use, hence z < 0.
     Thruster("RAZ", "azimuth", diameter=1.8, power_kw=800.0, x=22.0, y=0.0, z=-1.5),
 )
+
+# Environment directions of the capability plot [deg]. [2.4.6] asks for at
+# least 10 deg resolution over the full 360 deg.
+HEADINGS_DEG = tuple(range(0, 360, 10))

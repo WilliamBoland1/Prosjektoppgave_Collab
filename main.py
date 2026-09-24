@@ -1,24 +1,22 @@
 import matplotlib.pyplot as plt
 
+from dp_capability import config
+from dp_capability.models.capability import capability_numbers_level1, limiting_wind_speed_level1
 from dp_capability.plotting.capability_plot import plot_envelope
-
-# angle_deg, windspeed, current, significant_wave_height, thrust
-sample_data = [
-    [0, 9, 1.5, 2.0, 70],
-    [30, 8, 1.4, 1.9, 68],
-    [60, 6, 1.2, 1.6, 60],
-    [90, 4, 1.0, 1.3, 50],
-    [120, 6, 1.2, 1.6, 60],
-    [150, 8, 1.4, 1.9, 68],
-    [180, 9, 1.5, 2.0, 70],
-    [210, 8, 1.4, 1.9, 68],
-    [240, 6, 1.2, 1.6, 60],
-    [270, 4, 1.0, 1.3, 50],
-    [300, 6, 1.2, 1.6, 60],
-    [330, 8, 1.4, 1.9, 68],
-    [360, 9, 1.5, 2.0, 70],  # closes the loop back to angle 0
-]
+from dp_capability.standard import ENVIRONMENT_TABLE
 
 if __name__ == "__main__":
-    fig, ax = plot_envelope(sample_data, envelope_type="wave")
+    numbers = capability_numbers_level1(config.HULL, config.THRUSTERS, config.HEADINGS_DEG)
+
+    # [2.4.2]: one plot in DP capability numbers and one in limiting wind speed.
+    plot_envelope(
+        config.HEADINGS_DEG, numbers,
+        title="DP capability level 1 - DP capability number",
+        r_max=ENVIRONMENT_TABLE[-1].bf,
+    )
+    plot_envelope(
+        config.HEADINGS_DEG, limiting_wind_speed_level1(numbers),
+        title="DP capability level 1 - limiting wind speed [m/s]",
+        r_max=ENVIRONMENT_TABLE[-1].wind_speed,
+    )
     plt.show()
