@@ -1,9 +1,10 @@
 # Thrust — DP capability Level 1
 
-This document explains `nominal_thrust(...)` and `effective_thrust(...)` in
-`thrust.py` and maps DNV-ST-0111 (Edition December 2021) [3.9.1]–[3.9.3] to
-the code. The formula and Tables 3-1 to 3-4 below were transcribed from
-300 dpi renders of the PDF (pages 29–32) and checked against them.
+This document explains `nominal_thrust(...)`, `effective_thrust(...)`,
+`ventilation_loss_factor(...)` and `thrust_loss_factor_level1(...)` in
+`thrust.py` and maps DNV-ST-0111 (Edition December 2021) [3.9.1]–[3.9.5] to
+the code. The formulas and Tables 3-1 to 3-4 below were transcribed from
+300 dpi renders of the PDF (pages 29–33) and checked against them.
 
 ## 1. Background
 
@@ -126,7 +127,6 @@ picks rows by these rules:
 | AZ1, AZ2: ducted FPP azimuth, D 3.0, 2000 kW | 1200 | 1.0 / 0.7 | 0.93 | 1860 | 5580 | 314.598 | 377.52 / 264.26 | 339.77 |
 | BT1: tunnel, rounded inlet, D 2.0, 900 kW | 900 | 1.07 / 1.07 | 0.93 | 837 | 1674 | 140.984 | 135.77 / 135.77 | 122.19 |
 | BT2: tunnel, broken inlet, D 2.0, 900 kW | 900 | 1.0 / 1.0 | 0.93 | 837 | 1674 | 140.984 | 126.89 / 126.89 | 114.20 |
-| RAZ: open FPP azimuth, D 1.8, 800 kW | 800 | 1.0 / 0.9 | 0.93 | 744 | 1339.2 | 121.496 | 97.20 / 87.48 | 87.48 |
 
 The T_Nominal column is what Table A-3 reports as "Nominal thrust [kN]". It is
 the number to compare with DNV's Veracity app. `tests/models/test_thrust.py`
@@ -143,5 +143,108 @@ case there has the same data as AZ1.
 - `_eta1`, `_eta2` and `_eta_m` in `thrust.py` pick the row by the rules of §3.
 - `nominal_thrust(thruster, reverse=False)` returns newtons.
 - `effective_thrust(thruster, reverse=False, beta_t=BETA_MISC)` multiplies the nominal thrust by β_T.
-  - For now β_T is just β_misc.
-  - [3.9.5] defines β_T = β_misc · β_vent. The ventilation loss of [3.9.4] depends on the waves and on the actuator's submergence `ξ = draft − z`, and will be passed in through `beta_t` when it is added.
+  - The default is β_misc alone.
+  - For Level 1, β_T = β_misc · β_vent from `thrust_loss_factor_level1` (§6) is passed in as `beta_t`. `capability_numbers_level1` does this per condition and heading.
+
+## 6. Ventilation loss [3.9.4] and total thrust loss factor [3.9.5]
+
+A propeller close to the free surface can draw in air (ventilation, or
+aeration, p. 12), which costs a large part of its thrust. [3.9.4] gives the
+loss as a probability: the chance that the relative vertical motion between
+the actuator and the sea surface stays small enough for the propeller to
+stay submerged. The formulation is new in the December 2021 edition. The change
+log (p. 3) says it now accounts for the **propeller load** and is valid for
+propellers close to the surface, e.g. in ballast.
+
+### Formulas (PDF p. 32–33, images)
+
+```
+β_vent = Φ(k_V1 · 2ξ/D − k_V2 · σ)
+σ      = 0.25 · (A · Hs · min(T0, 1) + max(PropellerLoadFactor − 1, 0))
+A      = k_V4 · B · C
+B      = 1 + k_V5 · |dir|/π                 for dir ∈ [−π/2, π/2]
+         (1 + k_V5) − k_V5 · |dir|/π        for dir ∈ [−π, −π/2] ∪ [π/2, π]
+C      = 1                                  for x ≥ 0
+         1 + 0.4 · x/Lpp                    for x ≤ 0
+T0     = 0.64 · √Lpp / Tz
+PropellerLoadFactor = √PropellerLoad / k_V3
+PropellerLoad       = |T_Nominal| / D³      (T_Nominal in N, D in m)
+
+β_T    = β_misc · β_vent                                    [3.9.5]
+```
+
+| Symbol | Meaning |
+|---|---|
+| Φ | standard normal distribution function (mean 0, standard deviation 1) |
+| ξ | draft − actuator z: the submergence of the actuator centre ([3.8.3]), positive under water; ξ = 0 is the centre at the waterline |
+| D | propeller diameter [m] |
+| σ | standard deviation of the relative vertical motion between the actuator and the free surface |
+| Hs, Tz | significant wave height [m] and zero-up-crossing period [s]; Tz = Tp / 1.4049 ([3.3.3], `standard.TZ_FROM_TP`) |
+| x | the thruster's x position ([2.8.2], from Lpp/2) |
+| dir | the direction the waves come from |
+| T_Nominal | actuator nominal thrust, "thrust before losses" [N] |
+| k_V1 … k_V5 | 2, 1.5, 15.2, 0.85, 0.38 (`standard.K_V1` …) |
+
+What the terms do:
+- **2ξ/D** is the submergence in propeller radii. k_V1 · 2ξ/D is how far the propeller is from the surface, and k_V2 · σ how much the surface moves.
+- **B** is 1 in head and following seas and 1 + k_V5/2 = 1.19 in beam seas, linear in between.
+- **C** is 1 forward of midships and falls to 0.8 at the aft perpendicular (x = −Lpp/2).
+- **min(T0, 1)** reduces the motion in long waves (Tz > 0.64·√Lpp).
+- **The propeller load term** is there even in calm water. A heavily loaded propeller (large T/D³) draws the surface down, and that counts as extra relative motion.
+
+### Decisions
+
+1. **T_Nominal is the [3.9.2] nominal thrust** (agreed with William, 2026-09-28). [3.9.2] uses the same symbol and defines it as "thrust with no wind, waves or current", not the thrust the allocation asks for.
+   - It is taken in the direction used: the reversed nominal thrust for a reverse capacity row. Only shaft lines differ; tunnels are equal both ways, and azimuths only use forward.
+   - So β_vent depends on the thruster, the condition and the heading, but not on the allocation, and the LPs of `thruster_allocation.py` stay linear.
+2. **The second range of B is a union.** The PDF writes `[−π, −π/2] ∩ [π/2, π]`, whose intersection is empty. The two branches meet at |dir| = π/2 with the same value (1.19), so which branch owns that point doesn't matter.
+3. **Every actuator kind is included, tunnels too.** [3.9.4] excludes none.
+4. **Units: T_Nominal in N.** The PDF writes "T_Nominal[N]". With kN, the factor could never exceed 1 for a real thruster, and the propeller-load term the change log mentions would do nothing. With N a typical DP thruster has a factor of about 8.
+
+|dir| over [−π, π] is exactly the `fold_direction` of the other Level 1
+formulas, applied to the direction wrapped to [0, 2π).
+
+### Checks
+
+- **Centre at the waterline in calm water with a light propeller:** ξ = 0, σ = 0, so β_vent = Φ(0) = 0.5.
+- **Deep:** β_vent → 1. **Above the surface** (ξ < 0): β_vent < 0.5.
+- **Port/starboard:** only |dir| enters, so 90° and 270° give the same loss.
+- **Continuity:** B = 1.19 from both branches at π/2; C = 1 from both sides at x = 0; min(T0, 1) is continuous.
+- **Reversed thrust** has a lower T_Nominal (η2 < 1), so a lower propeller load and less ventilation.
+- **More power at the same diameter ventilates more.** The factor grows as P^(1/3). `tests/models/test_capability.py` shows this: the test PSV at 10× power has β_vent ≈ 0.001 at BF 11.
+
+### Worked example (the test vessel, `config.HULL` and `config.THRUSTERS`)
+
+| Thruster | T_Nominal [kN] | D [m] | Factor | ξ [m] | ξ/D | C |
+|---|---|---|---|---|---|---|
+| AZ1, AZ2 (x = −40, z = 1.8) | 377.52 | 3.0 | 7.779 | 4.2 | 1.40 | 0.8 |
+| BT1 (x = +31, z = 2.5) | 135.77 | 2.0 | 8.571 | 3.5 | 1.75 | 1 |
+| BT2 (x = +28, z = 2.5) | 126.89 | 2.0 | 8.285 | 3.5 | 1.75 | 1 |
+
+"Factor" is PropellerLoadFactor. β_vent at BF 6 (Hs 3.1 m, Tp 8.5 s, Tz 6.05 s,
+T0 = 0.946) and BF 11 (Hs 12.1 m, Tp 12.0 s, Tz 8.54 s, T0 = 0.670):
+
+| Thruster | BF 6, 0° | BF 6, 90° | BF 11, 0° | BF 11, 90° |
+|---|---|---|---|---|
+| AZ1, AZ2 | 0.9896 | 0.9849 | 0.8389 | 0.7248 |
+| BT1 | 0.9994 | 0.9989 | 0.9425 | 0.8611 |
+| BT2 | 0.9996 | 0.9992 | 0.9538 | 0.8834 |
+
+By hand for AZ1, BF 6, beam:
+- A = 0.85 · 1.19 · 0.8 = 0.8092;
+- σ = 0.25 · (0.8092 · 3.1 · 0.9461 + (7.779 − 1)) = 0.25 · (2.3734 + 6.779) = 2.2881;
+- β_vent = Φ(2 · 2 · 4.2/3 − 1.5 · 2.2881) = Φ(5.6 − 3.4322) = Φ(2.1678) = 0.9849.
+
+The aft azimuths lose more than the tunnels, despite C = 0.8, because they
+sit higher relative to their diameter (ξ/D = 1.4 against 1.75). Up to BF 6 the
+loss is at most about 1.5%; at BF 11 in beam seas it is 28% for the azimuths.
+
+### In the code
+
+- `K_V1` … `K_V5` in `dp_capability/standard.py`.
+- `_propeller_load_factor(t_nominal, diameter)` and `_relative_motion_std(hull, x, hs, tz, direction_rad, propeller_load_factor)` in `thrust.py`, one formula each.
+  - `_relative_motion_std` sets the wave term to 0 where `hs == 0`, so BF 0's `tp = nan` gives no nan, as in `wave_loads_level1`.
+- `ventilation_loss_factor(thruster, hull, hs, tp, direction_deg, reverse=False)` returns β_vent, vectorized over direction. It takes Tp, like `wave_loads_level1`, and converts to Tz itself. Φ is `scipy.stats.norm.cdf`.
+- `thrust_loss_factor_level1(...)` returns β_misc · β_vent: the part of the [3.11.6] total that doesn't depend on the thrust direction.
+  - The skeg factor β_T,flushing skeg does depend on it, so `allocate_thrust` applies it to the capacity polygon (`skeg_loss.md`).
+  - β_T,flushing dead only exists in failure cases (step 8).

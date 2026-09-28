@@ -1,10 +1,13 @@
+import dataclasses
+
 import numpy as np
 import pytest
 
-from dp_capability.models.capability import capability_numbers_level1, limiting_wind_speed_level1
+from dp_capability.models.capability import _loss_factors, capability_numbers_level1, limiting_wind_speed_level1
 from dp_capability.models.environmental_loads import environmental_loads_level1
 from dp_capability.models.thrust import effective_thrust
 from dp_capability.models.thruster_allocation import allocate_thrust
+from dp_capability.standard import environment
 from dp_capability.vessel import Hull, Thruster
 
 HEADINGS = np.arange(0, 360, 10)
@@ -45,7 +48,6 @@ def psv(thruster):
             thruster("azimuth", diameter=3.0, power_kw=2000.0 * power_scale, x=-40.0, y=-5.5, ducted=True),
             thruster("tunnel", power_kw=900.0 * power_scale, x=31.0, pitch="CPP", tunnel_inlet="rounded"),
             thruster("tunnel", power_kw=900.0 * power_scale, x=28.0, pitch="CPP", tunnel_inlet="broken"),
-            thruster("azimuth", diameter=1.8, power_kw=800.0 * power_scale, x=22.0),
         ]
 
     return make
@@ -53,26 +55,31 @@ def psv(thruster):
 
 def test_too_weak_for_bf1_gives_zero_everywhere(hull, psv):
     # T grows with P^(2/3), so 1e-6 of the power gives 1e-4 of the thrust:
-    # all five together have 100.3 N. The smallest BF 1 load at any heading
+    # all four together have 91.6 N. The smallest BF 1 load at any heading
     # is 603.0 N (head-on), and the thrusters can never give more than the
     # sum of their thrusts, so BF 1 fails everywhere.
     thrusters = psv(power_scale=1e-6)
-    assert sum(effective_thrust(t) for t in thrusters) == pytest.approx(100.3, abs=0.1)
+    assert sum(effective_thrust(t) for t in thrusters) == pytest.approx(91.6, abs=0.1)
     assert np.all(capability_numbers_level1(hull, thrusters, HEADINGS) == 0)
 
 
 def test_strong_enough_for_bf11_gives_eleven_everywhere(hull, psv):
     # 10 times the power gives 10^(2/3) = 4.64 times the thrust. The worst
-    # heading at BF 11 then needs u = 0.58.
-    assert np.all(capability_numbers_level1(hull, psv(power_scale=10.0), HEADINGS) == 11)
+    # heading at BF 11 then needs u = 0.73. Without ventilation: the propeller
+    # load factor grows as P^(1/3), and at 10 times the power the aft azimuths
+    # would ventilate almost completely (beta_vent ~ 0.001 at BF 11).
+    numbers = capability_numbers_level1(hull, psv(power_scale=10.0), HEADINGS, ventilation=False)
+    assert np.all(numbers == 11)
 
 
 def test_head_on_surge_is_the_last_bf_within_the_thrust(hull, thruster):
     # Head-on the load is pure surge (fy = mz = 0). Two azimuths at y = +5 and
     # -5 share it equally, so it balances while |Fx| <= 2T.
-    #   T = 108.895 kN (D = 2 m, 1000 kW, open), 2T = 217.79 kN
+    #   T = 108.895 kN (D = 2 m, 1000 kW, open, beta_misc), 2T = 217.79 kN
     #   |Fx| at BF 9 = 168.63 kN <= 217.79 kN
     #   |Fx| at BF 10 = 221.40 kN > 217.79 kN   ->  DP capability number 9
+    # Ventilation hardly matters here: xi / D = 4 / 2 gives beta_vent = 0.9998
+    # at BF 9 and 0.9994 at BF 10, so 2T becomes 217.75 and 217.65 kN.
     azimuths = [thruster("azimuth", y=5.0), thruster("azimuth", y=-5.0)]
     assert 2 * effective_thrust(azimuths[0]) == pytest.approx(217.79e3, rel=1e-4)
     assert -environmental_loads_level1(hull, 9, 0.0)[0] == pytest.approx(168.63e3, rel=1e-4)
@@ -81,13 +88,52 @@ def test_head_on_surge_is_the_last_bf_within_the_thrust(hull, thruster):
 
 
 def test_number_holds_in_all_lower_conditions_but_not_the_next(hull, psv):
-    # [2.2.2], checked with allocate_thrust directly at every 30 deg.
+    # [2.2.2], checked with allocate_thrust directly at every 30 deg, with the
+    # same thrust loss factors (ventilation included).
     thrusters = psv()
     headings = np.arange(0, 360, 30)
     for heading, number in zip(headings, capability_numbers_level1(hull, thrusters, headings)):
         for bf in range(1, 12):
             load = environmental_loads_level1(hull, bf, heading)
-            assert allocate_thrust(thrusters, load).feasible == (bf <= number), (heading, bf)
+            beta_t = _loss_factors(hull, thrusters, environment(bf), heading)
+            assert allocate_thrust(thrusters, load, beta_t=beta_t).feasible == (bf <= number), (heading, bf)
+
+
+def test_ventilation_never_raises_a_number(hull, psv):
+    # beta_vent <= 1, so no thruster gets stronger. At 150 deg BF 10 balances
+    # with beta_misc alone but not once ventilation is included.
+    with_ventilation = capability_numbers_level1(hull, psv(), HEADINGS)
+    without = capability_numbers_level1(hull, psv(), HEADINGS, ventilation=False)
+    assert np.all(with_ventilation <= without)
+    assert (without[15], with_ventilation[15]) == (10, 9)
+
+
+def test_forbidden_zones_never_raise_a_number(hull, psv):
+    # Zones only take directions away. For this layout the aft azimuths push
+    # in opposite surge directions for yaw and stay clear of their zones
+    # (90 +- 20.4 and 270 +- 20.4 deg), so the numbers are the same.
+    with_zones = capability_numbers_level1(hull, psv(), HEADINGS)
+    without = capability_numbers_level1(hull, psv(), HEADINGS, forbidden_zones=False)
+    assert np.all(with_zones <= without)
+    np.testing.assert_array_equal(with_zones, without)
+
+
+def test_skeg_loss_never_raises_a_number(hull, psv):
+    # With a skeg ending at (-36, 0), 4 m forward of the aft azimuths, the
+    # starboard azimuth loses thrust around 180-249 deg (and the port one
+    # around 111-180 deg), which it uses for loads from the beam quarters.
+    # The hull fixture has no skeg, so one is added here.
+    skegged = dataclasses.replace(hull, skegs=((-36.0, 0.0),))
+    with_skeg = capability_numbers_level1(skegged, psv(), HEADINGS)
+    without = capability_numbers_level1(skegged, psv(), HEADINGS, skeg_loss=False)
+    assert np.all(with_skeg <= without)
+    np.testing.assert_array_equal(HEADINGS[with_skeg < without], [100, 160, 200, 260])
+
+
+def test_loss_factors_without_ventilation_are_beta_misc(hull, psv):
+    beta_t = _loss_factors(hull, psv(), environment(6), HEADINGS, ventilation=False)
+    assert beta_t.shape == (4, 2, 36)
+    assert np.all(beta_t == 0.9)
 
 
 def test_port_starboard_symmetry(hull, psv):

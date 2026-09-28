@@ -56,3 +56,8 @@ class Thruster:
     permanent_magnet: bool = False
     contra_rotating: bool = False
     tunnel_inlet: str | None = None  # "broken", "rounded" or "other", Table 3-2; tunnels only
+    # User-given forbidden zones [3.11.2], Table A-6: (start, end) thrust
+    # angles [deg] in the [3.8.2] convention (0 = forward, counter-clockwise),
+    # each zone going counter-clockwise from start to end, e.g. ((80, 100),).
+    # The flushing sectors of [3.11.3] are added automatically.
+    forbidden_zones: tuple[tuple[float, float], ...] = ()

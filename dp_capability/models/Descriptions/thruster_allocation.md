@@ -17,7 +17,9 @@ What the standard requires (text read from PDF pages 16, 29 and 35):
 
 The load is `environmental_loads_level1(hull, bf, direction_deg)`, already
 multiplied by the dynamic factor 1.25. Each actuator can give at most its
-effective thrust `T = effective_thrust(thruster)` ([3.9.1]); see `thrust.md`.
+effective thrust `T = effective_thrust(thruster, beta_t=β_T)` ([3.9.1]); see
+`thrust.md`. β_T comes in through the `beta_t` argument (§4). Without it,
+β_T = β_misc.
 
 ### Coordinate system
 
@@ -83,6 +85,28 @@ at least one actuator is at u × its limit.
 Inside the LP the forces are divided by the largest limit, so the numbers are
 of order 1. The moment row then holds the lever arms in m.
 
+### Non-convex capacity: forbidden zones and skeg loss
+
+Two things make an azimuth's capacity non-convex:
+- **forbidden zones** ([3.11.2], [3.11.3]; `forbidden_zones.md`) take a sector out of its directions;
+- **the skeg loss** ([3.11.5]; `skeg_loss.md`) dents it where the race would hit the skeg.
+
+Both are handled with one general shape (since step 7c):
+- **Star polygon.** Over each allowed arc the capacity is a polygon seen from the origin, with corners at angle θ and radius T·β_skeg(θ). The corners are every 360°/N, at the arc ends, at the skeg breakpoints, and every 1° where β_skeg changes.
+  - Without zones or skeg this is exactly the regular N-gon above.
+  - Every corner lies on the true boundary, and the edges lie inside it, so the polygon is conservative.
+- **Convex pieces.** `_convex_fans` splits the polygon into fans (the origin plus consecutive corners). A fan grows while each corner turns left and it spans at most 180°. Such a fan is convex, so one LP describes it exactly.
+  - A right-turning corner starts a new fan, e.g. the bottom of the skeg dip, or a corner of radius 0.
+  - A closed ring without right turns stays one piece.
+- **Rows of a piece:** one per outer edge (unit outward normal, limit = the edge's distance from the origin, scaled by u), plus, for an open fan, the two boundary rays `sin a·fx − cos a·fy ≤ 0` and `−sin b·fx + cos b·fy ≤ 0` (limit 0, not scaled).
+- **Enumeration.** Pass 1 runs for every combination of pieces (one per azimuth), and the lowest u wins. Pass 2 runs in that combination.
+  - Every piece is exact, so the minimum is the exact optimum over the non-convex sets.
+  - The test vessel has 3 × 3 = 9 combinations.
+- **Pass 2's size measure** is kept separate from the capacity rows, since the capacity polygon is no longer regular. It is always the unit regular N-gon above.
+
+A tunnel or shaft line direction inside a zone gets limit 0. A shaft line's
+limits are multiplied by β_skeg at 0° and 180°; tunnels have no skeg loss.
+
 ## 3. Checking the signs
 
 - **Head-on load** (Fx < 0, pushed aft): the azimuths push forward, fx > 0, angle 0°.
@@ -91,7 +115,7 @@ of order 1. The moment row then holds the lever arms in m.
   - A bow tunnel (x > 0) pushes to starboard: `x·fy < 0`.
   - A port azimuth (y > 0) pushes forward: `−y·fx < 0`.
   - A starboard azimuth (y < 0) pushes aft: `−y·fx < 0`.
-- **Port/starboard mirror:** the test vessel's utilisation at 270° equals that at 90° (both 0.5874 at BF 6).
+- **Port/starboard mirror:** the test vessel's utilisation at 270° equals that at 90° (both 0.7444 at BF 6).
 
 The tests in `tests/models/test_thruster_allocation.py` check each of these with
 round loads written as multiples of T.
@@ -100,47 +124,55 @@ round loads written as multiples of T.
 
 BF 6, environment from 90° (starboard beam). The factored load from HANDOVER §4
 is (Fx, Fy, Mz) = (−5.5 kN, 358.0 kN, 509.0 kNm). `allocate_thrust` gives
-**u = 0.5874**, so the load is balanced:
+**u = 0.7445**, so the load is balanced:
 
 | Thruster | T [kN] | fx [kN] | fy [kN] | \|f\| [kN] | Angle [°] | \|f\| / T |
 |---|---|---|---|---|---|---|
-| AZ1 (−40, +5.5) | 339.77 | 183.05 | −77.90 | 198.94 | 336.95 | 0.5855 |
-| AZ2 (−40, −5.5) | 339.77 | −177.51 | −89.80 | 198.93 | 206.83 | 0.5855 |
-| BT1 (+31, 0) | 122.19 | 0 | −71.78 | 71.78 | 270 | 0.5874 |
-| BT2 (+28, 0) | 114.20 | 0 | −67.08 | 67.08 | 270 | 0.5874 |
-| RAZ (+22, 0) | 87.48 | 0 | −51.39 | 51.39 | 270 | 0.5874 |
+| AZ1 (−40, +5.5) | 339.77 | 238.16 | −84.74 | 252.79 | 340.41 | 0.7440 |
+| AZ2 (−40, −5.5) | 339.77 | −232.66 | −97.28 | 252.18 | 202.69 | 0.7422 |
+| BT1 (+31, 0) | 122.19 | 0 | −90.97 | 90.97 | 270 | 0.7445 |
+| BT2 (+28, 0) | 114.20 | 0 | −85.01 | 85.01 | 270 | 0.7445 |
 
-- The three forward actuators all push straight to starboard at exactly u.
-- The aft azimuths show 0.5855 < u. They lie on a side of the polygon (between the corners at 330° and 340° for AZ1), where the polygon is inside the circle. So measured against the polygon they are at u, and |f|/T is slightly lower.
+- The two tunnels both push straight to starboard at exactly u.
+- The aft azimuths show |f|/T < u. They lie on a side of the polygon (between the corners at 340° and 350° for AZ1, 200° and 210° for AZ2), where the polygon is inside the circle. So measured against the polygon they are at u, and |f|/T is slightly lower.
 - The aft azimuths **push against each other in surge**: AZ1 forward, AZ2 aft.
   - This is useful work, not waste. The load moment of +509 kNm must be met by −509 kNm.
   - Pushing to starboard at x = −40 turns the bow the *wrong* way (+). The azimuths' opposite surge forces at y = ±5.5 give a clockwise couple instead.
-  - Their net fx = 183.05 − 177.51 = 5.54 kN balances Fx.
+  - Their net fx = 238.16 − 232.66 = 5.50 kN balances Fx.
 
 Check by hand:
-- Fx: 183.05 − 177.51 = 5.54 ✓.
-- Fy: −77.90 − 89.80 − 71.78 − 67.08 − 51.39 = −357.95 ✓.
-- Mz: (−40)(−77.90) + (−40)(−89.80) + 31(−71.78) + 28(−67.08) + 22(−51.39) − 5.5·183.05 − (−5.5)(−177.51) = 3116.0 + 3592.0 − 2225.2 − 1878.2 − 1130.6 − 1006.8 − 976.3 = −509.1 ✓.
+- Fx: 238.16 − 232.66 = 5.50 ✓.
+- Fy: −84.74 − 97.28 − 90.97 − 85.01 = −358.00 ✓.
+- Mz: (−40)(−84.74) + (−40)(−97.28) + 31(−90.97) + 28(−85.01) − 5.5·238.16 − (−5.5)(−232.66) = 3389.6 + 3891.2 − 2820.1 − 2380.3 − 1309.9 − 1279.6 = −509.1 ✓.
 
 **Beam capability of the test vessel.** With the same approach:
-- BF 7 gives u = 0.826;
-- BF 8 (Fy = 664 kN, Mz = 1368 kNm) gives u = 1.106.
+- BF 7 (Fy = 500 kN, Mz = 846 kNm) gives u = 1.047;
+- BF 8 (Fy = 664 kN, Mz = 1368 kNm) gives u = 1.402.
 
-So the test vessel is BF 7 in beam seas. HANDOVER's first estimate of "roughly
-BF 8" added up all sway thrust (≈ 1000 kN), but the moment balance does not
-allow that. The forward group (tunnels + RAZ, 324 kN at x ≈ 27.5 m) has to
-match the moment of the aft azimuths at x = −40 m. Even a pure 664 kN sway load
-with no moment gives u = 1.055.
+So the test vessel is BF 6 in beam seas. Adding up all sway thrust (≈ 916 kN)
+would suggest far more, but the moment balance does not allow that. The
+forward group (the two tunnels, 236 kN at x ≈ 29.6 m) has to match the moment
+of the aft azimuths at x = −40 m. Even a pure 500 kN sway load (BF 7) with no
+moment gives u = 1.007.
 
 ## 4. In the code
 
-- `allocate_thrust(thrusters, load, n_sides=36)` in `dp_capability/models/thruster_allocation.py`:
+- `allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=True, skegs=())` in `dp_capability/models/thruster_allocation.py`:
   - `load` is `(Fx, Fy, Mz)` for **one** heading, e.g. one element of `environmental_loads_level1(...)`. It is not vectorized: step 6 calls it once per heading and BF (432 calls take about 1 s).
   - `n_sides` is the polygon's number of sides. It is a numerical choice, not a value from the standard, so it is a keyword argument and not in `standard.py`.
+  - `beta_t` holds one `(forward, reverse)` pair of thrust loss factors per thruster, e.g. from `thrust_loss_factor_level1` (`thrust.md` §6). Forward sets the azimuth polygon and the positive tunnel/shaft limit; reverse sets the negative one. `None` gives β_misc everywhere, and a wrong length raises `ValueError`.
+  - The factors are fixed numbers for the LP (T_Nominal of [3.9.2], not the commanded thrust), so the problem stays linear.
+  - `forbidden_zones=True` applies `forbidden_zones_level1(thrusters)` (the user zones and the [3.11.3] flushing sectors among the thrusters passed in). `False` ignores them, which gives the single convex problem of before step 7b.
+  - `skegs` holds the aft most point of each skeg (`Hull.skegs`) for the [3.11.5] skeg loss. An empty sequence means no skeg loss.
 - It returns an `Allocation` (frozen dataclass):
   - `fx`, `fy`: force per actuator [N], in the order of `thrusters`;
   - `utilisation`: u from pass 1 (∞ when the load can't be given);
   - `feasible`: `utilisation ≤ 1 + TOLERANCE`;
   - `angle_deg`: the [3.8.2] direction per actuator, `nan` for an idle one.
-- `_capacity_rows()` builds the limit rows per actuator kind (the table in §2). `_solve()` wraps `scipy.optimize.linprog` (HiGHS).
-- Not included yet (step 7): ventilation, flushing and skeg losses, forbidden zones, rudders and power limits. Forbidden zones make an azimuth's capacity set non-convex; see HANDOVER §6.
+- Helpers:
+  - `_thruster_pieces()` gives each thruster's convex pieces as rows. For azimuths it uses `_polygon_angles()` (corners), `_convex_fans()` (the split) and `_fan_rows()` (edges + rays); tunnels and shaft lines have one piece;
+  - `_size_rows()` gives the pass-2 size measure, and `_place()` puts per-thruster rows into the full LP matrix;
+  - `_problem()` builds one convex problem, `_min_utilisation()` is pass 1, and `_least_total_thrust()` is pass 2;
+  - `_solve()` wraps `scipy.optimize.linprog` (HiGHS).
+- The worked example in §3 uses β_misc only (no `beta_t`). With ventilation at BF 6, beam, u rises from 0.7445 to about 0.747. The forbidden zones don't change it: both azimuths push well outside their zones. The skeg loss raises it to about 0.759 (AZ2 at ~193° has β_skeg = 0.857; `skeg_loss.md` §5).
+- Not included yet (step 7): rudders (7d) and power limits (7e).

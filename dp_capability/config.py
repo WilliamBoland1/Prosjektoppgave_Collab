@@ -32,19 +32,17 @@ HULL = Hull(
     skegs=((-36.0, 0.0),),
 )
 
-# A typical PSV layout: two azimuths aft, two bow tunnels and a retractable
-# azimuth forward. power_kw is the documented DP power with torque limits, so
-# the 50%-of-MCR fallback of [3.9.2] guidance note 3 does not apply. The two
-# tunnels have different inlets and the retractable azimuth is open (real ones
-# are usually ducted), so that a comparison with Table A-3 in Veracity covers
-# several rows of Tables 3-1 to 3-3.
+# Two azimuths aft and two bow tunnels. Only azimuths and tunnels, because
+# those are the kinds available for testing in DNV's Veracity app. power_kw is
+# the documented DP power with torque limits, so the 50%-of-MCR fallback of
+# [3.9.2] guidance note 3 does not apply. The two tunnels have different
+# inlets, so that a comparison with Table A-3 in Veracity covers two rows of
+# Table 3-2.
 THRUSTERS = (
     Thruster("AZ1", "azimuth", diameter=3.0, power_kw=2000.0, x=-40.0, y=5.5, z=1.8, ducted=True),
     Thruster("AZ2", "azimuth", diameter=3.0, power_kw=2000.0, x=-40.0, y=-5.5, z=1.8, ducted=True),
     Thruster("BT1", "tunnel", diameter=2.0, power_kw=900.0, x=31.0, y=0.0, z=2.5, pitch="CPP", tunnel_inlet="rounded"),
     Thruster("BT2", "tunnel", diameter=2.0, power_kw=900.0, x=28.0, y=0.0, z=2.5, pitch="CPP", tunnel_inlet="broken"),
-    # Lowered below the keel when in use, hence z < 0.
-    Thruster("RAZ", "azimuth", diameter=1.8, power_kw=800.0, x=22.0, y=0.0, z=-1.5),
 )
 
 # Environment directions of the capability plot [deg]. [2.4.6] asks for at

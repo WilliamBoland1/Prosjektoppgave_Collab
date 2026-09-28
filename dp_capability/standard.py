@@ -60,6 +60,12 @@ ETA_M = {  # Table 3-4, mechanical efficiency
     "pod": 0.98,  # pods
 }
 BETA_MISC = 0.9  # constant 10% thrust loss, [3.9.3]
+# Coefficients of the ventilation loss formula, [3.9.4].
+K_V1 = 2.0
+K_V2 = 1.5
+K_V3 = 15.2
+K_V4 = 0.85
+K_V5 = 0.38
 
 
 @dataclass(frozen=True)

@@ -32,7 +32,8 @@ dp_capability/                          The Python package containing all
                                          densities, g, Tp/Tz ratio, dynamic
                                          factor, the Table 2-1 Beaufort
                                          environment, the thrust efficiency
-                                         Tables 3-1 to 3-4 and beta_misc.
+                                         Tables 3-1 to 3-4, beta_misc and the
+                                         ventilation coefficients k_V1-k_V5.
 ├── vessel.py                           Data containers for vessel input
                                          (Hull = Table A-2, Thruster =
                                          Table A-3). The values for a vessel
@@ -63,13 +64,24 @@ dp_capability/                          The Python package containing all
 │   │                                    current + waves from Table 2-1,
 │   │                                    times the dynamic factor 1.25.
 │   ├── thrust.py                       Nominal and effective thrust of one
-│   │                                    actuator ([3.9]): Tables 3-1 to 3-4
-│   │                                    and beta_misc.
+│   │                                    actuator ([3.9]): Tables 3-1 to 3-4,
+│   │                                    beta_misc, the ventilation loss
+│   │                                    beta_vent and the total beta_T.
+│   ├── forbidden_zones.py              Forbidden thrust directions
+│   │                                    ([3.11.2] user zones, [3.11.3]
+│   │                                    flushing sectors) and the allowed
+│   │                                    arcs between them.
+│   ├── skeg_loss.py                    Direction-dependent thrust loss from
+│   │                                    flushing the skeg ([3.11.5],
+│   │                                    Tables 3-7/3-8).
 │   ├── thruster_allocation.py          Thrust allocation ([2.4.4],
 │   │                                    [3.11.1]): thruster forces that
 │   │                                    balance one environmental load in
 │   │                                    surge, sway and yaw (two linear
-│   │                                    programs), and the utilisation.
+│   │                                    programs per combination of convex
+│   │                                    pieces of each azimuth's star-
+│   │                                    shaped capacity), and the
+│   │                                    utilisation.
 │   ├── capability.py                   DP capability number per heading
 │   │                                    ([2.2.2], [2.4.4]): steps up
 │   │                                    through Table 2-1 until the first
@@ -81,6 +93,8 @@ dp_capability/                          The Python package containing all
 │       ├── currentloads.md              maps to the code.
 │       ├── waveloads.md
 │       ├── thrust.md
+│       ├── forbidden_zones.md
+│       ├── skeg_loss.md
 │       ├── thruster_allocation.md
 │       └── capability.md
 │
@@ -116,6 +130,8 @@ tests/                                  Automated tests, mirroring the
 │   │                                    currentloads.py, waveloads.py and
 │   │                                    environmental_loads.py.
 │   ├── test_thrust.py                  Tests for thrust.py.
+│   ├── test_forbidden_zones.py         Tests for forbidden_zones.py.
+│   ├── test_skeg_loss.py               Tests for skeg_loss.py.
 │   ├── test_thruster_allocation.py     Tests for thruster_allocation.py.
 │   └── test_capability.py
 └── plotting/
