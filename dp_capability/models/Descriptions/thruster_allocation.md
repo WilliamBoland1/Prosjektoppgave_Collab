@@ -86,14 +86,15 @@ at least one actuator is at u × its limit.
 Inside the LP the forces are divided by the largest limit, so the numbers are
 of order 1. The moment row then holds the lever arms in m.
 
-### Non-convex capacity: forbidden zones and skeg loss
+### Non-convex capacity: forbidden zones, skeg loss and dead thrusters
 
-Two things make an azimuth's capacity non-convex:
+Three things make an azimuth's capacity non-convex:
 - **forbidden zones** ([3.11.2], [3.11.3]; `forbidden_zones.md`) take a sector out of its directions;
-- **the skeg loss** ([3.11.5]; `skeg_loss.md`) dents it where the race would hit the skeg.
+- **the skeg loss** ([3.11.5]; `skeg_loss.md`) dents it where the race would hit the skeg;
+- **flushing a dead thruster** ([3.11.4]; `dead_flushing.md`, failure runs only) cuts a straight-sided notch where the race would hit it.
 
-Both are handled with one general shape (since step 7c):
-- **Star polygon.** Over each allowed arc the capacity is a polygon seen from the origin, with corners at angle θ and radius T·β_skeg(θ). The corners are every 360°/N, at the arc ends, at the skeg breakpoints, and every 1° where β_skeg changes.
+All are handled with one general shape (since step 7c):
+- **Star polygon.** Over each allowed arc the capacity is a polygon seen from the origin, with corners at angle θ and radius T·β_skeg(θ)·β_dead(θ). The corners are every 360°/N, at the arc ends, at the skeg and dead flushing breakpoints, and every 1° where either factor changes.
   - Without zones or skeg this is exactly the regular N-gon above.
   - Every corner lies on the true boundary, and the edges lie inside it, so the polygon is conservative.
 - **Convex pieces.** `_convex_fans` splits the polygon into fans (the origin plus consecutive corners). A fan grows while each corner turns left and it spans at most 180°. Such a fan is convex, so one LP describes it exactly.
@@ -107,6 +108,7 @@ Both are handled with one general shape (since step 7c):
 
 A tunnel or shaft line direction inside a zone gets limit 0. A shaft line's
 limits are multiplied by β_skeg at 0° and 180°; tunnels have no skeg loss.
+Both are multiplied by β_dead of their directions.
 
 ### Shaft lines with a rudder (step 7d)
 
@@ -180,7 +182,7 @@ moment gives u = 1.007.
 
 ## 4. In the code
 
-- `allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=True, skegs=(), power_sources=None)` in `dp_capability/models/thruster_allocation.py`:
+- `allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=True, skegs=(), power_sources=None, dead_thrusters=())` in `dp_capability/models/thruster_allocation.py`:
   - `load` is `(Fx, Fy, Mz)` for **one** heading, e.g. one element of `environmental_loads_level1(...)`. It is not vectorized: step 6 calls it once per heading and BF (432 calls take about 1 s).
   - `n_sides` is the polygon's number of sides. It is a numerical choice, not a value from the standard, so it is a keyword argument and not in `standard.py`.
   - `beta_t` holds one `(forward, reverse)` pair of thrust loss factors per thruster, e.g. from `thrust_loss_factor_level1` (`thrust.md` §6). Forward sets the azimuth polygon and the positive tunnel/shaft limit; reverse sets the negative one. `None` gives β_misc everywhere, and a wrong length raises `ValueError`.
@@ -188,6 +190,7 @@ moment gives u = 1.007.
   - `forbidden_zones=True` applies `forbidden_zones_level1(thrusters)` (the user zones and the [3.11.3] flushing sectors among the thrusters passed in). `False` ignores them, which gives the single convex problem of before step 7b.
   - `skegs` holds the aft most point of each skeg (`Hull.skegs`) for the [3.11.5] skeg loss. An empty sequence means no skeg loss.
   - `power_sources` holds the `PowerSource`s of the operating mode (`power.md`); every thruster then needs a `power_supply`. `None` means no power limit.
+  - `dead_thrusters` holds the thrusters lost in a failure run, for the [3.11.4] loss (`dead_flushing.md`). Empty for the intact vessel.
 - It returns an `Allocation` (frozen dataclass):
   - `fx`, `fy`: force per actuator [N], in the order of `thrusters`;
   - `utilisation`: U from pass 1 (∞ when the load can't be given);

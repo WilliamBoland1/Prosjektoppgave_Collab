@@ -40,12 +40,15 @@ dp_capability/                          The Python package containing all
                                          Tables 3-1 to 3-4, beta_misc, the
                                          ventilation coefficients k_V1-k_V5
                                          the rudder coefficients (Tables
-                                         3-5/3-6), the 10% power reserve and
-                                         the battery rules ([3.12]).
+                                         3-5/3-6), the 10% power reserve,
+                                         the battery rules ([3.12]) and the
+                                         +-30 deg bow sector of [2.5.1].
 ├── vessel.py                           Data containers for vessel input
                                          (Hull = Table A-2, Thruster =
                                          Table A-3, Rudder = Table A-4,
-                                         PowerSource = a Table A-5 column).
+                                         PowerSource = a Table A-5 column,
+                                         RedundancyGroup = what one single
+                                         failure loses, from the DP FMEA).
                                          The values for a vessel
                                          live in config.py.
 │
@@ -91,6 +94,9 @@ dp_capability/                          The Python package containing all
 │   ├── skeg_loss.py                    Direction-dependent thrust loss from
 │   │                                    flushing the skeg ([3.11.5],
 │   │                                    Tables 3-7/3-8).
+│   ├── dead_flushing.py                Direction-dependent thrust loss from
+│   │                                    flushing a dead thruster in a
+│   │                                    failure run ([3.11.4], Figure 3-6).
 │   ├── thruster_allocation.py          Thrust allocation ([2.4.4],
 │   │                                    [3.11.1]): thruster forces that
 │   │                                    balance one environmental load in
@@ -99,12 +105,19 @@ dp_capability/                          The Python package containing all
 │   │                                    pieces of each azimuth's star-
 │   │                                    shaped capacity), and the
 │   │                                    utilisation.
+│   ├── redundancy.py                   What is left of the vessel after the
+│   │                                    loss of one redundancy group
+│   │                                    ([2.4.8], [2.5.4]).
 │   ├── capability.py                   DP capability number per heading
 │   │                                    ([2.2.2], [2.4.4]): steps up
 │   │                                    through Table 2-1 until the first
 │   │                                    condition the thrusters cannot
 │   │                                    balance. Also the limiting wind
-│   │                                    speed [m/s] for the plots.
+│   │                                    speed [m/s] for the plots, the
+│   │                                    failure runs, the combined worst
+│   │                                    case ([2.4.7]) and
+│   │                                    DP capability-L1(A, B, C, D)
+│   │                                    ([2.5]).
 │   └── Descriptions/                   Markdown write-ups explaining the
 │       ├── windloads.md                 theory behind each model and how it
 │       ├── currentloads.md              maps to the code.
@@ -114,14 +127,17 @@ dp_capability/                          The Python package containing all
 │       ├── power.md
 │       ├── forbidden_zones.md
 │       ├── skeg_loss.md
+│       ├── dead_flushing.md
 │       ├── thruster_allocation.md
-│       └── capability.md
+│       ├── capability.md
+│       └── redundancy.md
 │
 └── plotting/                           Turning results into figures.
     ├── __init__.py
     └── capability_plot.py              Functions that take a capability
                                          result and produce the DP capability
-                                         plot(s).
+                                         plot(s): one envelope, or several
+                                         with a legend (Figures A-1/A-2).
 
 data/                                   Input data, kept out of the code
                                          package so data and logic stay
@@ -153,7 +169,9 @@ tests/                                  Automated tests, mirroring the
 │   ├── test_power.py                   Tests for power.py.
 │   ├── test_forbidden_zones.py         Tests for forbidden_zones.py.
 │   ├── test_skeg_loss.py               Tests for skeg_loss.py.
+│   ├── test_dead_flushing.py           Tests for dead_flushing.py.
 │   ├── test_thruster_allocation.py     Tests for thruster_allocation.py.
+│   ├── test_redundancy.py              Tests for redundancy.py.
 │   └── test_capability.py
 └── plotting/
     └── test_capability_plot.py

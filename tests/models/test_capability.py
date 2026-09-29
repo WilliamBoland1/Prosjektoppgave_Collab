@@ -3,12 +3,20 @@ import dataclasses
 import numpy as np
 import pytest
 
-from dp_capability.models.capability import _loss_factors, capability_numbers_level1, limiting_wind_speed_level1
+from dp_capability.models.capability import (
+    _loss_factors,
+    capability_notation,
+    capability_numbers_level1,
+    failure_numbers_level1,
+    information_elements_level1,
+    limiting_wind_speed_level1,
+    worst_case_numbers,
+)
 from dp_capability.models.environmental_loads import environmental_loads_level1
 from dp_capability.models.thrust import effective_thrust
 from dp_capability.models.thruster_allocation import allocate_thrust
 from dp_capability.standard import environment
-from dp_capability.vessel import Hull, PowerSource, Rudder, Thruster
+from dp_capability.vessel import Hull, PowerSource, RedundancyGroup, Rudder, Thruster
 
 HEADINGS = np.arange(0, 360, 10)
 
@@ -188,6 +196,96 @@ def test_returns_integers_in_the_shape_of_the_headings(hull, psv):
     assert numbers.shape == HEADINGS.shape
     assert np.issubdtype(numbers.dtype, np.integer)
     assert np.shape(capability_numbers_level1(hull, psv(), 90.0)) == ()
+
+
+def test_losing_one_of_two_azimuths_head_on(hull, thruster):
+    # Two azimuths on the centreline, 40 m apart (more than 15D = 30 m, so no
+    # flushing sector). Head-on the load is pure surge along the centreline.
+    #   Intact: 2T = 217.79 kN, BF 9 needs 168.63 kN, BF 10 221.40 kN  ->  9
+    #   One lost: T = 108.89 kN, BF 7 needs 82.34 kN, BF 8 117.31 kN   ->  7
+    # (beta_vent head-on is 0.99998 at BF 7 and 0.99995 at BF 8.)
+    azimuths = [thruster("azimuth", name="F", x=20.0), thruster("azimuth", name="A", x=-20.0)]
+    assert -environmental_loads_level1(hull, 7, 0.0)[0] == pytest.approx(82.34e3, rel=1e-4)
+    assert -environmental_loads_level1(hull, 8, 0.0)[0] == pytest.approx(117.31e3, rel=1e-4)
+    assert capability_numbers_level1(hull, azimuths, 0.0) == 9
+    groups = [RedundancyGroup("F", thrusters=("F",)), RedundancyGroup("A", thrusters=("A",))]
+    assert failure_numbers_level1(hull, azimuths, 0.0, groups) == {"F": 7, "A": 7}
+
+
+def test_failure_numbers_are_runs_on_what_is_left(hull, psv):
+    # Two switchboards as in config.py; losing one loses its two thrusters.
+    thrusters = [dataclasses.replace(t, name=name, power_supply=((bus, 1.0),))
+                 for t, name, bus in zip(psv(), ["AZ1", "AZ2", "BT1", "BT2"], ["S1", "S2", "S1", "S2"])]
+    sources = [PowerSource("S1", 3600.0), PowerSource("S2", 3600.0)]
+    groups = [RedundancyGroup("S1", thrusters=("AZ1", "BT1"), power_sources=("S1",)),
+              RedundancyGroup("S2", thrusters=("AZ2", "BT2"), power_sources=("S2",))]
+    headings = np.arange(0, 360, 30)
+    failures = failure_numbers_level1(hull, thrusters, headings, groups, power_sources=sources)
+    assert list(failures) == ["S1", "S2"]
+    np.testing.assert_array_equal(failures["S1"], capability_numbers_level1(
+        hull, [thrusters[1], thrusters[3]], headings, power_sources=sources[1:], dead_thrusters=[thrusters[0], thrusters[2]]))
+    np.testing.assert_array_equal(failures["S2"], capability_numbers_level1(
+        hull, [thrusters[0], thrusters[2]], headings, power_sources=sources[:1], dead_thrusters=[thrusters[1], thrusters[3]]))
+    # The surviving azimuth flushes the dead one (11 m < 4 D = 12 m) at 270
+    # or 90 deg +- 5.45 deg, but the tunnel limits there: no number changes.
+    without = failure_numbers_level1(hull, thrusters, headings, groups, power_sources=sources, dead_flushing=False)
+    for name in failures:
+        np.testing.assert_array_equal(failures[name], without[name])
+
+
+def test_flushing_a_dead_thruster_head_on(hull, thruster):
+    # Two open azimuths on the centreline, 6 m apart, head-on (pure surge).
+    # Loss of the aft one: the forward one pushes forward and its race hits
+    # the dead one, s = 6 m < 8 D = 16 m. s/D = 3:
+    #   beta = 1 - 1 / (0.02 * 9 + 0.25 * 3 + 1.2) = 1 - 1/2.13 = 0.53052
+    #   capacity = 0.53052 * 108.89 kN = 57.77 kN
+    #   BF 6 needs 53.14 kN, BF 7 82.34 kN                  ->  6
+    #   without the dead flushing loss: T = 108.89 kN       ->  7
+    # Loss of the forward one: the aft one's race goes away from it  ->  7
+    azimuths = [thruster("azimuth", name="F", x=3.0), thruster("azimuth", name="A", x=-3.0)]
+    assert -environmental_loads_level1(hull, 6, 0.0)[0] == pytest.approx(53.14e3, rel=1e-4)
+    groups = [RedundancyGroup("A", thrusters=("A",)), RedundancyGroup("F", thrusters=("F",))]
+    assert failure_numbers_level1(hull, azimuths, 0.0, groups) == {"A": 6, "F": 7}
+    assert failure_numbers_level1(hull, azimuths, 0.0, groups, dead_flushing=False) == {"A": 7, "F": 7}
+
+
+def test_worst_case_is_the_lowest_per_heading_table_a_1():
+    # DNV-ST-0111 Table A-1 (p. 69, checked with William on the crop,
+    # 2026-09-29), headings 0, 10, 20, 30 deg. [2.4.7]: the combined plot is
+    # the lowest of the two redundancy groups at each heading.
+    loss_of_swbd_1 = [9, 8, 6, 5]
+    loss_of_swbd_2 = [11, 11, 10, 8]
+    np.testing.assert_array_equal(worst_case_numbers([loss_of_swbd_1, loss_of_swbd_2]), [9, 8, 6, 5])
+    # Figure A-2 of the same example says L1(9, 7, 5, 2): A = 9 and C = 5 are
+    # the values at 30 deg, so the +-30 deg sector includes its edges.
+    a, _, c, _ = information_elements_level1([0, 10, 20, 30], [11, 11, 11, 9], [9, 8, 6, 5])
+    assert (a, c) == (9, 5)
+
+
+def test_information_elements_take_the_bow_sector_with_its_edges():
+    # [2.5.1]: A and C within +-30 deg of the bow (330-30 deg, edges
+    # included), B and D over all headings.
+    headings = np.arange(0, 360, 10)
+    intact = np.full(36, 11)
+    intact[3], intact[33], intact[4], intact[18] = 8, 9, 6, 7  # 30, 330, 40, 180 deg
+    worst = np.full(36, 10)
+    worst[33], worst[9] = 5, 3  # 330, 90 deg
+    assert information_elements_level1(headings, intact, worst) == (8, 6, 5, 3)
+
+
+def test_information_elements_without_redundancy_are_na():
+    # [2.5.2]: C and D do not apply to a non-redundant DP system.
+    assert information_elements_level1([0, 90, 180, 270], [9, 6, 11, 6]) == (9, 6, None, None)
+
+
+def test_information_elements_need_a_heading_near_the_bow():
+    with pytest.raises(ValueError):
+        information_elements_level1([90, 180, 270], [6, 11, 6])
+
+
+def test_capability_notation():
+    assert capability_notation(8, 6, 5, 3) == "DP capability-L1(8, 6, 5, 3)"
+    assert capability_notation(8, 6) == "DP capability-L1(8, 6, NA, NA)"
 
 
 def test_limiting_wind_speed_is_the_table_2_1_wind_speed():

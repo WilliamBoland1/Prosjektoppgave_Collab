@@ -4,6 +4,7 @@ from itertools import product
 import numpy as np
 from scipy.optimize import linprog
 
+from dp_capability.models.dead_flushing import dead_flushing_breakpoints, dead_flushing_factor
 from dp_capability.models.forbidden_zones import allowed_arcs, forbidden_zones_level1
 from dp_capability.models.power import supply_matrix, thruster_power_kw, usable_power_kw
 from dp_capability.models.rudders import max_rudder_angle_deg, rudder_forces
@@ -17,8 +18,9 @@ AZIMUTHING = ("azimuth", "pod", "cycloidal")
 # of the effective thrust still counts as balanced.
 TOLERANCE = 1e-6
 # Corner spacing [deg] of an azimuth's capacity polygon where the skeg loss
-# factor changes. The chords lie inside the true curve, so the polygon stays
-# conservative, by far less than the 1 - cos(5 deg) of the 36-gon.
+# or dead flushing factor changes. The chords lie inside the true curve (on it
+# for dead flushing alone), so the polygon stays conservative, by far less than
+# the 1 - cos(5 deg) of the 36-gon.
 RAMP_STEP_DEG = 1.0
 # Rudder angle spacing [deg] of the corners of a shaft line's rudder fan. The
 # [3.10.1] forces lie on a parabola, and the chords between corners inside it.
@@ -71,15 +73,15 @@ def _inside(angle_deg, zones):
     return False
 
 
-def _polygon_angles(arc, n_sides, skeg_breakpoints):
+def _polygon_angles(arc, n_sides, breakpoints):
     """
     Corner angles [deg] of an azimuth's capacity polygon over one allowed arc
     (None: the full circle, returned without repeating 360): every
-    360/n_sides deg from 0, the arc ends, the skeg breakpoints, and every
-    RAMP_STEP_DEG where the skeg loss factor changes.
+    360/n_sides deg from 0, the arc ends, the breakpoints of the skeg and
+    dead flushing losses, and every RAMP_STEP_DEG where a loss factor changes.
     """
     candidates = list(np.arange(n_sides) * 360.0 / n_sides)
-    for angles, factors in skeg_breakpoints:
+    for angles, factors in breakpoints:
         candidates += list(angles)
         for k in range(len(angles) - 1):
             if factors[k] < 1 or factors[k + 1] < 1:
@@ -175,7 +177,7 @@ def _along_x(sign, limit):
     return (directions, np.array([limit, 0.0, 0.0, 0.0]), np.array([True, False, False, False]))
 
 
-def _rudder_pieces(thruster, forward, reverse, zones, skegs):
+def _rudder_pieces(thruster, forward, reverse, zones, loss):
     """
     The pieces of a shaft line propeller with a rudder. With positive thrust,
     the [3.10.1] forces over the rudder angles -alpha_max..alpha_max, drawn
@@ -183,14 +185,15 @@ def _rudder_pieces(thruster, forward, reverse, zones, skegs):
     rudder is neglected ([3.10.2]) and the force is along -x only. The
     propeller gives one or the other, so they are separate pieces.
 
-    Forbidden zones and the skeg loss follow the propeller shaft (0 or
-    180 deg), not the direction of the deflected force: [3.11.3] takes the
-    thrust direction as the vector through the propeller shaft.
+    Forbidden zones and the skeg and dead flushing losses (loss(angles))
+    follow the propeller shaft (0 or 180 deg), not the direction of the
+    deflected force: [3.11.3] takes the thrust direction as the vector
+    through the propeller shaft.
     """
     limit = max_rudder_angle_deg(thruster)  # also checks that it is a shaft line
     pieces = []
     if not _inside(0.0, zones):
-        t = forward * float(skeg_loss_factor(thruster, skegs, 0.0))
+        t = forward * float(loss(0.0))
         alpha = np.unique(np.r_[np.arange(-limit, limit, RUDDER_STEP_DEG), limit])
         f_surge, f_sway = rudder_forces(thruster, t, alpha)
         if len(alpha) > 1 and t > 0 and f_sway[-1] > 0:
@@ -201,35 +204,42 @@ def _rudder_pieces(thruster, forward, reverse, zones, skegs):
             # No rudder angle or no lift: the plain forward thrust.
             pieces.append(_along_x(1.0, t))
     if not _inside(180.0, zones):
-        pieces.append(_along_x(-1.0, reverse * float(skeg_loss_factor(thruster, skegs, 180.0))))
+        pieces.append(_along_x(-1.0, reverse * float(loss(180.0))))
     return pieces or [_no_force()]
 
 
-def _thruster_pieces(thruster, beta_t, n_sides, zones, skegs):
+def _thruster_pieces(thruster, beta_t, n_sides, zones, skegs, dead=()):
     """
     The convex pieces one thruster's force can be chosen from, each as rows
     (directions, limits, scales): directions . f <= limits, times u where
     scales is True. An azimuth's capacity is the polygon with radius
-    T * beta_skeg(angle) over its allowed directions, split into convex fans;
-    a shaft line with a rudder has a rudder fan and reversed thrust (see
-    _rudder_pieces); tunnel thrusters and other shaft line propellers have
-    one piece.
+    T * beta_skeg(angle) * beta_dead(angle) over its allowed directions,
+    split into convex fans; a shaft line with a rudder has a rudder fan and
+    reversed thrust (see _rudder_pieces); tunnel thrusters and other shaft
+    line propellers have one piece.
     """
     beta_forward, beta_reverse = beta_t
     forward = effective_thrust(thruster, beta_t=beta_forward)
     reverse = effective_thrust(thruster, reverse=True, beta_t=beta_reverse)
+
+    def loss(angles):
+        # beta_T,flushing skeg * beta_T,flushing dead, [3.11.6]
+        return skeg_loss_factor(thruster, skegs, angles) * dead_flushing_factor(thruster, dead, angles)
+
     if thruster.rudder is not None:
-        return _rudder_pieces(thruster, forward, reverse, zones, skegs)
+        return _rudder_pieces(thruster, forward, reverse, zones, loss)
     if thruster.kind in AZIMUTHING:
         arcs = allowed_arcs(zones)
         if not arcs:
             # Every direction forbidden: no force at all.
             return [_no_force()]
-        breakpoints = [b for b in (skeg_loss_breakpoints(thruster, skeg) for skeg in skegs) if b is not None]
+        breakpoints = [skeg_loss_breakpoints(thruster, skeg) for skeg in skegs]
+        breakpoints += [dead_flushing_breakpoints(thruster, d) for d in dead]
+        breakpoints = [b for b in breakpoints if b is not None]
         pieces = []
         for arc in arcs:
             angles = _polygon_angles(arc, n_sides, breakpoints)
-            radii = forward * skeg_loss_factor(thruster, skegs, angles)
+            radii = forward * loss(angles)
             pieces += [_fan_rows(*fan) for fan in _convex_fans(angles, radii, arc is None)]
         return pieces
     if thruster.kind == "tunnel":
@@ -238,7 +248,7 @@ def _thruster_pieces(thruster, beta_t, n_sides, zones, skegs):
     else:  # shaft line propeller without a rudder
         directions = np.array([[1.0, 0.0], [-1.0, 0.0]])
         angles = np.array([0.0, 180.0])
-    limits = np.array([forward, reverse]) * skeg_loss_factor(thruster, skegs, angles)
+    limits = np.array([forward, reverse]) * loss(angles)
     # A direction inside a forbidden zone is not available at all.
     limits = np.where([_inside(a, zones) for a in angles], 0.0, limits)
     return [(directions, limits, np.ones(2, dtype=bool))]
@@ -429,7 +439,8 @@ def _thrust_fractions(p, fx, fy):
     return r
 
 
-def allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=True, skegs=(), power_sources=None):
+def allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=True, skegs=(), power_sources=None,
+                    dead_thrusters=()):
     """
     Thruster forces that balance one environmental load, DNV-ST-0111 [2.4.4]
     and [3.11.1]. Forces and moment balance at the same time:
@@ -453,9 +464,10 @@ def allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=Tr
     what is available.
 
     Azimuths, pods and cycloidals push in any direction with their forward
-    effective thrust T, times the skeg loss factor of that direction
-    ([3.11.5]). This capacity is drawn as a polygon inside the true curve,
-    with corners every 360/n_sides deg (every 1 deg where the skeg loss
+    effective thrust T, times the skeg loss factor ([3.11.5]) and the dead
+    flushing factor ([3.11.4]) of that direction, together beta_T of
+    [3.11.6]. This capacity is drawn as a polygon inside the true curve,
+    with corners every 360/n_sides deg (every 1 deg where a loss factor
     changes), so it is conservative by at most 1 - cos(pi / n_sides). Tunnel
     thrusters push along y and shaft line propellers along x, with the
     reversed effective thrust in the negative direction. A shaft line with a
@@ -465,8 +477,8 @@ def allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=Tr
     reversed thrust stays along -x ([3.10.2]).
 
     Forbidden zones ([3.11.2] user zones and [3.11.3] flushing sectors, see
-    forbidden_zones_level1()) take directions away, and the skeg loss dents
-    the polygon; both make it non-convex. The polygon is split into convex
+    forbidden_zones_level1()) take directions away, and the skeg and dead
+    flushing losses dent the polygon; all make it non-convex. The polygon is split into convex
     pieces, pass 1 is solved for every combination of pieces and the lowest
     u is kept; pass 2 is solved in the first combination that reaches it. A
     tunnel or shaft line direction inside a zone is not available; for a
@@ -499,6 +511,10 @@ def allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=Tr
         The switchboards and prime movers of the operating mode ([3.12.1]).
         Every thruster then needs its power_supply (Table A-5). None: no
         power limit, each thruster may use its full P_B.
+    dead_thrusters : sequence of dp_capability.vessel.Thruster, optional
+        Thrusters lost in a failure run. Working thrusters that flush them
+        get the loss of [3.11.4] (dead_flushing.dead_flushing_factor()).
+        Empty for the intact vessel.
 
     Returns
     -------
@@ -518,7 +534,7 @@ def allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=Tr
         raise ValueError(f"beta_t needs one (forward, reverse) pair per thruster, got {len(beta_t)} for {n}")
     zones = forbidden_zones_level1(thrusters) if forbidden_zones else [[] for _ in thrusters]
     options = [
-        _thruster_pieces(t, b, n_sides, z, skegs) for t, b, z in zip(thrusters, beta_t, zones)
+        _thruster_pieces(t, b, n_sides, z, skegs, dead_thrusters) for t, b, z in zip(thrusters, beta_t, zones)
     ]
     sizes = [_size_rows(t, n_sides) for t in thrusters]
     a_size = _place(sizes, n)

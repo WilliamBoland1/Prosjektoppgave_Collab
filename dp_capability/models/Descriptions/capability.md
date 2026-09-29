@@ -108,7 +108,7 @@ is the number without the skeg loss (`skeg_loss=False`).
   - The largest relative rise is near astern, where both azimuths push aft into their ramps: +12% at 170° (BF 6, at u ≈ 0.12), and from 0.692 to 0.747 at BF 11. These headings have margin enough, so no other number changes (`skeg_loss.md` §5).
 - **Beam:** BF 6 (u = 0.759 at BF 6, 1.071 at BF 7). The whole sector 60–100° is BF 6.
 - **Head and stern seas:** BF 11 within ±10° of the bow and ±10° of the stern. BF 11 head-on needs u = 0.628.
-- **Lowest number over 360°:** 6. **Lowest within ±30° of the bow:** 8. These will become B and A of `DP capability-L1(A, B, C, D)` in step 8 ([2.5.1]).
+- **Lowest number over 360°:** 6. **Lowest within ±30° of the bow:** 8. These are B and A of `DP capability-L1(A, B, C, D)` ([2.5.1]). With the two redundancy groups of step 8a the result is **DP capability-L1(8, 6, 5, 3)**; the failure runs and C, D are in `redundancy.md` §5.
 - **Close calls:**
   - At 50° BF 7 is balanced with u = 0.962.
   - At 100° BF 7 fails with u = 1.011.
@@ -123,8 +123,7 @@ is the number without the skeg loss (`skeg_loss=False`).
 - `limiting_wind_speed_level1(numbers)` in the same file: the Table 2-1 `wind_speed` of each number, via `standard.environment()`, so numbers outside 0–11 raise `ValueError`.
 - `plot_envelope(headings_deg, values, title=None, r_max=None)` in `dp_capability/plotting/capability_plot.py`: returns `(fig, ax)`. `r_max` fixes the outer ring (11 for numbers, 32.6 m/s for wind), so plots of different vessels can be compared.
 - `config.HEADINGS_DEG` holds 0–350° in 10° steps ([2.4.6]).
-- `main.py`: config → numbers → both plots.
-- Not included yet:
-  - rudders and power (steps 7d–7e);
-  - failure cases and the (A, B, C, D) numbers (step 8);
-  - the Table A-7 / A-8 result tables (step 8).
+- `main.py`: config → intact and failure numbers → the notation and three plots (`redundancy.md` §6).
+- Rudders (7d, `rudders.md`) and power (7e, `power.md`) are included through `allocate_thrust`. Failure runs, the combined worst case and (A, B, C, D) are in `redundancy.md` (step 8a).
+- Flushing a dead thruster (§3.11.4, step 8b, `dead_flushing.md`) only applies in failure runs, through `dead_thrusters`.
+- Not included yet: the Table A-1 and A-7 to A-10 result tables (step 8c).

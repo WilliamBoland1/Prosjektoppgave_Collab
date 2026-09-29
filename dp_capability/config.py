@@ -8,7 +8,7 @@ vessel can be entered in DNV's Veracity DP capability app for comparison.
 """
 import math
 
-from dp_capability.vessel import Hull, PowerSource, Thruster
+from dp_capability.vessel import Hull, PowerSource, RedundancyGroup, Thruster
 
 HULL = Hull(
     loa=88.0,
@@ -56,6 +56,15 @@ THRUSTERS = (
 POWER_SOURCES = (
     PowerSource("SWBD 1", available_kw=3600.0),
     PowerSource("SWBD 2", available_kw=3600.0),
+)
+
+# Redundancy groups, as a DP FMEA would give them ([2.4.8]): with the bus-tie
+# open, losing a switchboard loses its gen-sets and the two thrusters on it.
+# The vessel is taken to be redundant, so C and D of DP capability-L1(A, B,
+# C, D) apply ([2.5.2]).
+REDUNDANCY_GROUPS = (
+    RedundancyGroup("SWBD 1", thrusters=("AZ1", "BT1"), power_sources=("SWBD 1",)),
+    RedundancyGroup("SWBD 2", thrusters=("AZ2", "BT2"), power_sources=("SWBD 2",)),
 )
 
 # Environment directions of the capability plot [deg]. [2.4.6] asks for at

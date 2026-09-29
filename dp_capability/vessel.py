@@ -96,3 +96,16 @@ class PowerSource:
     # True for a switchboard: 10% of its power is reserved [3.12.3]. False for
     # a prime mover driving a propeller directly.
     electrical: bool = True
+
+
+@dataclass(frozen=True)
+class RedundancyGroup:
+    """
+    One redundancy group as determined by the DP FMEA, DNV-ST-0111 [2.4.8]
+    and [2.5.4]: the actuators and power sources lost together in a single
+    failure. Each group gives one failure run.
+    """
+
+    name: str  # e.g. "SWBD 1"; the run is "Loss of SWBD 1" (Table A-1)
+    thrusters: tuple[str, ...] = ()  # names of the Thrusters lost
+    power_sources: tuple[str, ...] = ()  # names of the PowerSources lost

@@ -120,4 +120,5 @@ then run out of thrust.
   - `_inequalities()` builds the rows shared by both passes;
   - `_thrust_fractions()` recomputes r from the forces.
 - `capability_numbers_level1(..., power_sources=None)` passes it through. `main.py` uses `config.POWER_SOURCES`.
-- **Not done yet (step 8):** failures. A failed redundancy group will be the same run with its sources and their thrusters removed. Tables A-8 to A-10 can be filled from `thrust_fraction`, `power_kw` and `source_power_kw`.
+- **Failures (step 8a, `redundancy.md`):** a failed redundancy group is the same run with its sources and thrusters removed. A thruster fed partly from a lost source keeps only its remaining share of P_B.
+- **Not done yet (step 8c):** Tables A-8 to A-10, to be filled from `thrust_fraction`, `power_kw` and `source_power_kw`.

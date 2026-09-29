@@ -344,6 +344,45 @@ def test_forces_stay_inside_the_skeg_reduced_capacity(psv, load):
     assert a.utilisation >= allocate_thrust(psv, load).utilisation - 1e-9
 
 
+def test_flushing_a_dead_thruster_straight_on(thruster):
+    # Open, D = 2, with a dead azimuth 10 m aft: forward thrust sends the race
+    # onto it. s/D = 5 gives beta = 0.66102 at 0 deg
+    # (tests/models/test_dead_flushing.py), so 0.5 T forward needs
+    # u = 0.5 / 0.66102 = 0.75641. Without the dead thruster u = 0.5.
+    azimuth = thruster("azimuth")
+    dead = thruster("azimuth", name="DEAD", x=-10.0)
+    t = effective_thrust(azimuth)
+    load = single_thruster_load(azimuth, (0.5 * t, 0.0))
+    assert allocate_thrust([azimuth], load, dead_thrusters=[dead]).utilisation == pytest.approx(0.75641, abs=1e-5)
+    assert allocate_thrust([azimuth], load).utilisation == pytest.approx(0.5)
+
+
+def test_dead_flushing_capacity_is_the_straight_line_of_figure_3_6(thruster):
+    # The midpoint of the line from beta * T at 0 deg to T at the sector edge
+    # is T * (0.82695, 0.05957) (tests/models/test_dead_flushing.py). It lies
+    # on the capacity boundary, so it needs exactly u = 1: the polygon
+    # corners every 1 deg in the sector lie on that line.
+    azimuth = thruster("azimuth")
+    dead = thruster("azimuth", name="DEAD", x=-10.0)
+    t = effective_thrust(azimuth)
+    load = single_thruster_load(azimuth, (0.82695 * t, 0.05957 * t))
+    assert allocate_thrust([azimuth], load, dead_thrusters=[dead]).utilisation == pytest.approx(1.0, abs=1e-4)
+
+
+def test_a_tunnel_flushing_a_dead_thruster(thruster):
+    # Dead azimuth 5 m to starboard: pushing to port sends the tunnel's race
+    # onto it. Open, s/D = 2.5: beta = 1 - 1 / (0.125 + 0.625 + 1.2) = 0.48718.
+    # 0.25 T to port then needs u = 0.25 / 0.48718 = 0.51316; to starboard
+    # the race goes the other way, so u = 0.25.
+    tunnel = thruster("tunnel")
+    dead = thruster("azimuth", name="DEAD", y=-5.0)
+    t = effective_thrust(tunnel)
+    to_port = allocate_thrust([tunnel], single_thruster_load(tunnel, (0.0, 0.25 * t)), dead_thrusters=[dead])
+    to_starboard = allocate_thrust([tunnel], single_thruster_load(tunnel, (0.0, -0.25 * t)), dead_thrusters=[dead])
+    assert to_port.utilisation == pytest.approx(0.51316, abs=1e-5)
+    assert to_starboard.utilisation == pytest.approx(0.25)
+
+
 @pytest.fixture
 def rudder():
     # NACA rudder with A_r = D^2 for the default D = 2 m: C_Y = 0.01386 and

@@ -92,6 +92,10 @@ POWER_RESERVE_FRACTION = 0.10
 BATTERY_SOC_HIGH = 0.8
 BATTERY_SOC_LOW = 0.2
 BATTERY_MIN_HOURS = 0.5
+# Half-width of the sector around the bow [deg] in which A and C of
+# DP capability-LX(A, B, C, D) are taken: "within heading +-30 deg relative
+# to the environmental forces", [2.5.1].
+BOW_SECTOR_DEG = 30.0
 
 
 @dataclass(frozen=True)
