@@ -1,6 +1,6 @@
 import numpy as np
 
-from dp_capability.standard import RHO_WATER, fold_direction
+from dp_capability_quasi.standard import RHO_WATER, fold_direction
 
 
 def current_loads_level1(hull, current_speed, direction_deg):

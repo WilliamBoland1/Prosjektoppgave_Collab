@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.optimize import linprog
 
-from dp_capability.models.thrust import effective_thrust
+from dp_capability_quasi.models.thrust import effective_thrust
 
 # Actuator kinds that can turn their thrust in any direction.
 AZIMUTHING = ("azimuth", "pod", "cycloidal")

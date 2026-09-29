@@ -1,7 +1,7 @@
-from dp_capability.models.currentloads import current_loads_level1
-from dp_capability.models.waveloads import wave_loads_level1
-from dp_capability.models.windloads import wind_loads_level1
-from dp_capability.standard import DYNAMIC_FACTOR_LEVEL1, environment
+from dp_capability_quasi.models.currentloads import current_loads_level1
+from dp_capability_quasi.models.waveloads import wave_loads_level1
+from dp_capability_quasi.models.windloads import wind_loads_level1
+from dp_capability_quasi.standard import DYNAMIC_FACTOR_LEVEL1, environment
 
 
 def environmental_loads_level1(hull, bf, direction_deg, dynamic_factor=DYNAMIC_FACTOR_LEVEL1):

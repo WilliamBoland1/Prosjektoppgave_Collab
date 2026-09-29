@@ -8,7 +8,7 @@ vessel can be entered in DNV's Veracity DP capability app for comparison.
 """
 import math
 
-from dp_capability.vessel import Hull, Thruster
+from dp_capability_quasi.vessel import Hull, Thruster
 
 HULL = Hull(
     loa=88.0,
@@ -31,6 +31,7 @@ HULL = Hull(
     xl_current=-1.5,
     skegs=((-36.0, 0.0),),
 )
+
 
 # A typical PSV layout: two azimuths aft, two bow tunnels and a retractable
 # azimuth forward. power_kw is the documented DP power with torque limits, so

@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pytest
 
-from dp_capability.standard import ENVIRONMENT_TABLE, environment, fold_direction
+from dp_capability_quasi.standard import ENVIRONMENT_TABLE, environment, fold_direction
 
 
 def test_environment_calm():

@@ -1,11 +1,11 @@
 import numpy as np
 import pytest
 
-from dp_capability.models.currentloads import current_loads_level1
-from dp_capability.models.environmental_loads import environmental_loads_level1
-from dp_capability.models.waveloads import _period_factor, wave_loads_level1
-from dp_capability.models.windloads import wind_loads_level1
-from dp_capability.vessel import Hull
+from dp_capability_quasi.models.currentloads import current_loads_level1
+from dp_capability_quasi.models.environmental_loads import environmental_loads_level1
+from dp_capability_quasi.models.waveloads import _period_factor, wave_loads_level1
+from dp_capability_quasi.models.windloads import wind_loads_level1
+from dp_capability_quasi.vessel import Hull
 
 # Round numbers so the expected values can be checked by hand:
 #   q = 0.5 * 1.226 * 10**2         = 61.3 Pa

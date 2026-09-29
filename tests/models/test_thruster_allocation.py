@@ -3,9 +3,9 @@ import math
 import numpy as np
 import pytest
 
-from dp_capability.models.thrust import effective_thrust
-from dp_capability.models.thruster_allocation import TOLERANCE, allocate_thrust
-from dp_capability.vessel import Thruster
+from dp_capability_quasi.models.thrust import effective_thrust
+from dp_capability_quasi.models.thruster_allocation import TOLERANCE, allocate_thrust
+from dp_capability_quasi.vessel import Thruster
 
 
 @pytest.fixture

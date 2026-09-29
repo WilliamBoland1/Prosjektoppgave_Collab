@@ -1,6 +1,6 @@
 import numpy as np
 
-from dp_capability.standard import RHO_AIR, fold_direction
+from dp_capability_quasi.standard import RHO_AIR, fold_direction
 
 AIR_DENSITY = 1.23  # kg/m^3, value used in Blendermann (1994)
 

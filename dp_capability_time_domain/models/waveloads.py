@@ -1,6 +1,6 @@
 import numpy as np
 
-from dp_capability.standard import G, RHO_WATER, TZ_FROM_TP, fold_direction
+from dp_capability_time_domain.standard import G, RHO_WATER, TZ_FROM_TP, fold_direction
 
 
 def _period_factor(t_prime):

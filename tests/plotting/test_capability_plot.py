@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from dp_capability.plotting.capability_plot import plot_envelope
+from dp_capability_quasi.plotting.capability_plot import plot_envelope
 
 HEADINGS = np.arange(0, 360, 10)
 VALUES = np.arange(36) % 12

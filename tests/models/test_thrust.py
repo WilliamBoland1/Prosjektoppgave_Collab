@@ -1,7 +1,7 @@
 import pytest
 
-from dp_capability.models.thrust import _eta1, _eta2, _eta_m, effective_thrust, nominal_thrust
-from dp_capability.vessel import Thruster
+from dp_capability_quasi.models.thrust import _eta1, _eta2, _eta_m, effective_thrust, nominal_thrust
+from dp_capability_quasi.vessel import Thruster
 
 
 @pytest.fixture

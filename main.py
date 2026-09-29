@@ -1,9 +1,9 @@
 import matplotlib.pyplot as plt
 
-from dp_capability import config
-from dp_capability.models.capability import capability_numbers_level1, limiting_wind_speed_level1
-from dp_capability.plotting.capability_plot import plot_envelope
-from dp_capability.standard import ENVIRONMENT_TABLE
+from dp_capability_quasi import config
+from dp_capability_quasi.models.capability import capability_numbers_level1, limiting_wind_speed_level1
+from dp_capability_quasi.plotting.capability_plot import plot_envelope
+from dp_capability_quasi.standard import ENVIRONMENT_TABLE
 
 if __name__ == "__main__":
     numbers = capability_numbers_level1(config.HULL, config.THRUSTERS, config.HEADINGS_DEG)

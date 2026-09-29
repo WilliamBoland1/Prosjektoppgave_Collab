@@ -1,11 +1,11 @@
 import numpy as np
 import pytest
 
-from dp_capability.models.capability import capability_numbers_level1, limiting_wind_speed_level1
-from dp_capability.models.environmental_loads import environmental_loads_level1
-from dp_capability.models.thrust import effective_thrust
-from dp_capability.models.thruster_allocation import allocate_thrust
-from dp_capability.vessel import Hull, Thruster
+from dp_capability_quasi.models.capability import capability_numbers_level1, limiting_wind_speed_level1
+from dp_capability_quasi.models.environmental_loads import environmental_loads_level1
+from dp_capability_quasi.models.thrust import effective_thrust
+from dp_capability_quasi.models.thruster_allocation import allocate_thrust
+from dp_capability_quasi.vessel import Hull, Thruster
 
 HEADINGS = np.arange(0, 360, 10)
 

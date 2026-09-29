@@ -1,4 +1,4 @@
-from dp_capability.standard import (
+from dp_capability_time_domain.standard import (
     BETA_MISC,
     ETA1,
     ETA2_FORWARD,
