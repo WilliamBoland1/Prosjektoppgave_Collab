@@ -11,6 +11,11 @@ main.py                                 Entry point. Reads config/data, calls
                                          triggers plotting. Contains no
                                          calculation or plotting logic itself.
 
+SOURCES.md                              Where each part of DNV-ST-0111 was
+                                         read from (PDF text layer or a
+                                         rendered crop) and whether William
+                                         checked the transcription.
+
 dp_capability/                          The Python package containing all
                                          reusable logic. Both main.py and any
                                          notebooks should import from here.
@@ -32,11 +37,14 @@ dp_capability/                          The Python package containing all
                                          densities, g, Tp/Tz ratio, dynamic
                                          factor, the Table 2-1 Beaufort
                                          environment, the thrust efficiency
-                                         Tables 3-1 to 3-4, beta_misc and the
-                                         ventilation coefficients k_V1-k_V5.
+                                         Tables 3-1 to 3-4, beta_misc, the
+                                         ventilation coefficients k_V1-k_V5
+                                         and the rudder coefficients (Tables
+                                         3-5/3-6).
 ├── vessel.py                           Data containers for vessel input
                                          (Hull = Table A-2, Thruster =
-                                         Table A-3). The values for a vessel
+                                         Table A-3, Rudder = Table A-4).
+                                         The values for a vessel
                                          live in config.py.
 │
 ├── processing/                         Data cleaning and preparation.
@@ -67,6 +75,9 @@ dp_capability/                          The Python package containing all
 │   │                                    actuator ([3.9]): Tables 3-1 to 3-4,
 │   │                                    beta_misc, the ventilation loss
 │   │                                    beta_vent and the total beta_T.
+│   ├── rudders.py                      Force of a shaft line propeller
+│   │                                    with the rudder behind it ([3.10],
+│   │                                    Tables 3-5/3-6).
 │   ├── forbidden_zones.py              Forbidden thrust directions
 │   │                                    ([3.11.2] user zones, [3.11.3]
 │   │                                    flushing sectors) and the allowed
@@ -93,6 +104,7 @@ dp_capability/                          The Python package containing all
 │       ├── currentloads.md              maps to the code.
 │       ├── waveloads.md
 │       ├── thrust.md
+│       ├── rudders.md
 │       ├── forbidden_zones.md
 │       ├── skeg_loss.md
 │       ├── thruster_allocation.md
@@ -130,6 +142,7 @@ tests/                                  Automated tests, mirroring the
 │   │                                    currentloads.py, waveloads.py and
 │   │                                    environmental_loads.py.
 │   ├── test_thrust.py                  Tests for thrust.py.
+│   ├── test_rudders.py                 Tests for rudders.py.
 │   ├── test_forbidden_zones.py         Tests for forbidden_zones.py.
 │   ├── test_skeg_loss.py               Tests for skeg_loss.py.
 │   ├── test_thruster_allocation.py     Tests for thruster_allocation.py.

@@ -30,6 +30,18 @@ class Hull:
 
 
 @dataclass(frozen=True)
+class Rudder:
+    """Rudder behind a shaft line propeller, as listed in DNV-ST-0111 Table A-4."""
+
+    profile: str  # key of Table 3-5, e.g. "naca", "flap" or "nozzle" (Figure 3-5)
+    # A_r: area of the movable part of the rudder directly behind the
+    # propeller [m^2], with the chord limited to at most 1.0 D at any position [3.10.1].
+    area: float
+    max_angle_deg: float  # maximum rudder angle [deg]; above 30 deg the 30 deg values are used
+    behind_fixed_nozzle: bool = False  # Table 3-6: k2 = 1.15 if True, else 1.0
+
+
+@dataclass(frozen=True)
 class Thruster:
     """
     Actuator data as listed in DNV-ST-0111 Table A-3. SI units, except the
@@ -46,8 +58,9 @@ class Thruster:
     # P_B: MCR brake power available in DP mode/bollard pull, with power and
     # torque limits taken into account [kW], see [3.9.2] guidance note 3.
     power_kw: float
-    # Position [m] as defined in [3.8.3], e.g. the volume centre of a tunnel
-    # or the intersection of propeller shaft and azimuthing axis.
+    # Position [m] as defined in [3.8.3], e.g. the volume centre of a tunnel,
+    # the intersection of propeller shaft and azimuthing axis, or for a shaft
+    # line with a rudder the intersection of rudder stock and propeller axis.
     x: float
     y: float
     z: float
@@ -61,3 +74,4 @@ class Thruster:
     # each zone going counter-clockwise from start to end, e.g. ((80, 100),).
     # The flushing sectors of [3.11.3] are added automatically.
     forbidden_zones: tuple[tuple[float, float], ...] = ()
+    rudder: Rudder | None = None  # shaft lines only, Table A-4 and [3.10]

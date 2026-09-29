@@ -66,6 +66,24 @@ K_V2 = 1.5
 K_V3 = 15.2
 K_V4 = 0.85
 K_V5 = 0.38
+# Rudder lift and drag coefficients, [3.10.1]: C_Y = 0.0126 * k1 * k2 * A_r / D^2
+# and C_x = 0.02 * C_Y, with the rudder angle in degrees, capped at 30 deg.
+RUDDER_C_Y = 0.0126
+RUDDER_C_X_FROM_C_Y = 0.02
+RUDDER_ANGLE_CAP_DEG = 30.0
+K1_RUDDER = {  # Table 3-5, rudder profile type (Figure 3-5), ahead
+    "naca": 1.1,  # NACA - Göttingen
+    "hollow": 1.35,  # width somewhere <= 75% of a flat-sided profile with the same nose radius
+    "flat_sided": 1.1,
+    "fish_tail": 1.4,  # profile with «fish tail»
+    "flap": 1.65,  # rudder with flap
+    "nozzle": 1.9,  # nozzle rudder
+    "mixed": 1.21,  # mixed profiles, e.g. HSVA
+}
+K2_RUDDER = {  # Table 3-6, rudder/nozzle arrangement
+    "other": 1.0,  # all other arrangements
+    "fixed_nozzle": 1.15,  # rudder behind a fixed propeller nozzle
+}
 
 
 @dataclass(frozen=True)

@@ -49,6 +49,7 @@ the environmental load:
 | azimuth, pod, cycloidal | any direction | \|f\| ≤ T, as an inscribed polygon (below) |
 | tunnel | along y only (fx = 0) | −T_rev ≤ fy ≤ T (the same both ways, Table 3-2) |
 | shaft line (no rudder) | along x only (fy = 0) | −T_rev ≤ fx ≤ T |
+| shaft line with rudder | ahead: a fan within ±29° of forward (A_r = D², NACA); astern: along −x only | the [3.10.1] forces up to T; −T_rev ≤ fx astern (`rudders.md`) |
 
 - An azimuthing actuator never needs reverse thrust, because it can turn round. It only uses T.
 - Water jets are rejected by `effective_thrust` ([3.8.1]).
@@ -76,7 +77,7 @@ highest force any actuator needs, as a fraction of its effective thrust.
    - If no amount of thrust can give the load (e.g. tunnels only against a surge load), the problem is infeasible. Then u = ∞ and the forces are `nan`.
 2. **Pass 2:** keep u (plus a slack of `TOLERANCE` = 10⁻⁶) and minimise the total thrust `Σ |f_i|`.
    - For azimuths |f_i| is measured with the polygon: `t_i ≥ (cos φ_k·fx_i + sin φ_k·fy_i) / cos(π/N)` for every k. This equals |f_i| at the corners.
-   - For tunnels and shaft lines it is `t_i ≥ ±f_i`.
+   - For tunnels and shaft lines it is `t_i ≥ ±f_i`. A shaft line with a rudder uses the polygon, like an azimuth.
    - Why it's needed: pass 1 only fixes the most loaded actuator. Actuators with room to spare could push against each other at no cost, and their forces and angles would be meaningless in Table A-8.
 
 u is reported for the whole thruster set. When it is not exactly 0 or ∞,
@@ -106,6 +107,18 @@ Both are handled with one general shape (since step 7c):
 
 A tunnel or shaft line direction inside a zone gets limit 0. A shaft line's
 limits are multiplied by β_skeg at 0° and 180°; tunnels have no skeg loss.
+
+### Shaft lines with a rudder (step 7d)
+
+A rudder ([3.10]; `rudders.md`) gives a shaft line **two pieces** through the
+same machinery:
+- **Ahead:** the fan of propeller + rudder forces, with corners at T·(1 − C_x α², C_y α) every 1° of rudder angle (`RUDDER_STEP_DEG`) from −α_max to +α_max. It goes through `_convex_fans` and `_fan_rows` like an azimuth arc; the parabola makes it a single convex fan.
+- **Astern:** −T_rev ≤ fx ≤ 0 with fy = 0, since the rudder is neglected with negative thrust ([3.10.2]).
+
+The propeller can't go ahead and astern at once, so the two are enumerated as
+separate pieces, not joined into their convex hull. The zones and β_skeg are
+taken at the shaft direction (0° for the fan, 180° astern), because [3.11.3]
+defines the thrust direction through the propeller shaft.
 
 ## 3. Checking the signs
 
@@ -170,9 +183,9 @@ moment gives u = 1.007.
   - `feasible`: `utilisation ≤ 1 + TOLERANCE`;
   - `angle_deg`: the [3.8.2] direction per actuator, `nan` for an idle one.
 - Helpers:
-  - `_thruster_pieces()` gives each thruster's convex pieces as rows. For azimuths it uses `_polygon_angles()` (corners), `_convex_fans()` (the split) and `_fan_rows()` (edges + rays); tunnels and shaft lines have one piece;
+  - `_thruster_pieces()` gives each thruster's convex pieces as rows. For azimuths it uses `_polygon_angles()` (corners), `_convex_fans()` (the split) and `_fan_rows()` (edges + rays). A shaft line with a rudder gets its fan and astern segment from `_rudder_pieces()`. Tunnels and other shaft lines have one piece;
   - `_size_rows()` gives the pass-2 size measure, and `_place()` puts per-thruster rows into the full LP matrix;
   - `_problem()` builds one convex problem, `_min_utilisation()` is pass 1, and `_least_total_thrust()` is pass 2;
   - `_solve()` wraps `scipy.optimize.linprog` (HiGHS).
 - The worked example in §3 uses β_misc only (no `beta_t`). With ventilation at BF 6, beam, u rises from 0.7445 to about 0.747. The forbidden zones don't change it: both azimuths push well outside their zones. The skeg loss raises it to about 0.759 (AZ2 at ~193° has β_skeg = 0.857; `skeg_loss.md` §5).
-- Not included yet (step 7): rudders (7d) and power limits (7e).
+- Not included yet: power limits (step 7e).

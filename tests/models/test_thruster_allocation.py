@@ -7,7 +7,7 @@ from dp_capability.models.forbidden_zones import forbidden_zones_level1
 from dp_capability.models.skeg_loss import skeg_loss_factor
 from dp_capability.models.thrust import effective_thrust
 from dp_capability.models.thruster_allocation import TOLERANCE, allocate_thrust
-from dp_capability.vessel import Thruster
+from dp_capability.vessel import Rudder, Thruster
 
 
 @pytest.fixture
@@ -343,6 +343,124 @@ def test_forces_stay_inside_the_skeg_reduced_capacity(psv, load):
     assert a.utilisation >= allocate_thrust(psv, load).utilisation - 1e-9
 
 
+@pytest.fixture
+def rudder():
+    # NACA rudder with A_r = D^2 for the default D = 2 m: C_Y = 0.01386 and
+    # C_x = 0.0002772 (tests/models/test_rudders.py). At 30 deg the propeller
+    # and rudder give (1 - 0.0002772 * 900, 0.01386 * 30) T = (0.75052, 0.4158) T.
+    return Rudder(profile="naca", area=4.0, max_angle_deg=35.0)
+
+
+# Direction of the force at 30 deg rudder: atan2(0.4158, 0.75052) = 28.99 deg.
+RUDDER_EDGE_DEG = math.degrees(math.atan2(0.4158, 0.75052))
+
+
+def test_rudder_turns_forward_thrust_sideways(thruster, rudder):
+    # Half of the 30 deg force: a corner of the rudder fan, so u = 0.5.
+    shaft = thruster("shaft_line", rudder=rudder)
+    t = effective_thrust(shaft)
+    a = allocate_thrust([shaft], (-0.5 * 0.75052 * t, -0.5 * 0.4158 * t, 0.0))
+    assert a.utilisation == pytest.approx(0.5)
+    assert a.fx == pytest.approx([0.5 * 0.75052 * t])
+    assert a.fy == pytest.approx([0.5 * 0.4158 * t])
+    assert a.angle_deg == pytest.approx([RUDDER_EDGE_DEG])
+    assert RUDDER_EDGE_DEG == pytest.approx(28.99, abs=0.01)
+
+
+def test_rudder_side_force_is_limited_to_the_fan(thruster, rudder):
+    # Pure sway (90 deg) or any direction beyond 28.99 deg is outside the fan,
+    # however much thrust: a single shaft line cannot balance it.
+    shaft = thruster("shaft_line", rudder=rudder)
+    t = effective_thrust(shaft)
+    assert allocate_thrust([shaft], (0.0, -0.1 * t, 0.0)).utilisation == math.inf
+    c, s = math.cos(math.radians(35.0)), math.sin(math.radians(35.0))
+    assert allocate_thrust([shaft], (-0.1 * t * c, -0.1 * t * s, 0.0)).utilisation == math.inf
+
+
+def test_rudder_gives_no_side_force_when_backing(thruster, rudder):
+    # [3.10.2]: with negative thrust the rudder is neglected. Backing with a
+    # side force cannot be balanced; pure backing is as without a rudder:
+    # 0.45 T of the 0.9 T reversed thrust (open FPP), u = 0.5.
+    shaft = thruster("shaft_line", rudder=rudder)
+    t = effective_thrust(shaft)
+    assert allocate_thrust([shaft], (0.45 * t, 0.1 * t, 0.0)).utilisation == math.inf
+    a = allocate_thrust([shaft], (0.45 * t, 0.0, 0.0))
+    assert a.utilisation == pytest.approx(0.5)
+    assert a.fy == pytest.approx([0.0], abs=1e-6)
+
+
+def test_rudder_is_not_used_by_a_shaft_line_without_one(thruster):
+    # The plain shaft line has no side force at all.
+    shaft = thruster("shaft_line")
+    t = effective_thrust(shaft)
+    assert allocate_thrust([shaft], (-0.5 * 0.75052 * t, -0.5 * 0.4158 * t, 0.0)).utilisation == math.inf
+
+
+def test_zones_act_on_the_shaft_direction_not_the_rudder_force(thruster, rudder):
+    # [3.11.3] takes the thrust direction through the propeller shaft. A zone
+    # around 0 deg removes all forward thrust, rudder fan included, but not
+    # the reversed thrust; a zone at 20-40 deg, around the deflected force
+    # but not the shaft, removes nothing.
+    load = (-0.5 * 0.75052, -0.5 * 0.4158, 0.0)
+    blocked = thruster("shaft_line", rudder=rudder, forbidden_zones=((-10.0, 10.0),))
+    t = effective_thrust(blocked)
+    assert allocate_thrust([blocked], np.multiply(load, t)).utilisation == math.inf
+    assert allocate_thrust([blocked], (0.45 * t, 0.0, 0.0)).utilisation == pytest.approx(0.5)
+    aside = thruster("shaft_line", rudder=rudder, forbidden_zones=((20.0, 40.0),))
+    assert allocate_thrust([aside], np.multiply(load, t)).utilisation == pytest.approx(0.5)
+
+
+@pytest.fixture
+def twin_screw(thruster):
+    # Two shaft lines aft with NACA rudders (A_r = D^2 = 9 m^2) and the two bow
+    # tunnels of the psv fixture. with_rudders=False gives plain shaft lines.
+    def make(with_rudders=True):
+        r = Rudder(profile="naca", area=9.0, max_angle_deg=35.0) if with_rudders else None
+        return [
+            thruster("shaft_line", diameter=3.0, power_kw=2000.0, x=-38.0, y=5.0, rudder=r),
+            thruster("shaft_line", diameter=3.0, power_kw=2000.0, x=-38.0, y=-5.0, rudder=r),
+            thruster("tunnel", power_kw=900.0, x=31.0, pitch="CPP", tunnel_inlet="rounded"),
+            thruster("tunnel", power_kw=900.0, x=28.0, pitch="CPP", tunnel_inlet="broken"),
+        ]
+
+    return make
+
+
+@pytest.mark.parametrize(
+    "load",
+    [(-100e3, 0.0, 0.0), (60e3, -150e3, 2e6), (0.0, -300e3, 0.0), (0.0, 200e3, 0.0), (0.0, 0.0, -1e7)],
+)
+def test_rudder_forces_stay_inside_their_pieces(twin_screw, load):
+    # Forward: inside u times the fan, i.e. fx <= u T and |fy| within the
+    # 28.99 deg edges. Backing: along -x only, up to u times the reversed thrust.
+    thrusters = twin_screw()
+    a = allocate_thrust(thrusters, load)
+    assert balance_residual(thrusters, a, load) == pytest.approx([0.0, 0.0, 0.0], abs=1e-3)
+    slope = 0.4158 / 0.75052
+    for unit, fx, fy in zip(thrusters[:2], a.fx[:2], a.fy[:2]):
+        u = a.utilisation + 2 * TOLERANCE
+        if fx < 0:
+            assert fy == pytest.approx(0.0, abs=1e-6)
+            assert -fx <= u * effective_thrust(unit, reverse=True) + 1e-6
+        else:
+            assert fx <= u * effective_thrust(unit) + 1e-6
+            assert abs(fy) <= slope * fx + 1e-6
+    # The rudders only add capacity.
+    assert a.utilisation <= allocate_thrust(twin_screw(False), load).utilisation + 1e-9
+
+
+def test_rudders_share_a_sway_load_with_the_tunnels(twin_screw):
+    # Without rudders only the bow tunnels give sway, and the shaft lines have
+    # to balance their yaw moment with opposite surge. With rudders the stern
+    # pushes sideways too, so the same load needs less.
+    load = (0.0, -300e3, 0.0)
+    with_rudders = allocate_thrust(twin_screw(), load)
+    without = allocate_thrust(twin_screw(False), load)
+    assert with_rudders.utilisation < without.utilisation
+    assert np.any(np.abs(with_rudders.fy[:2]) > 1e3)
+    assert without.fy[:2] == pytest.approx([0.0, 0.0], abs=1e-6)
+
+
 def test_rejects_loss_factors_of_the_wrong_length(thruster):
     with pytest.raises(ValueError):
         allocate_thrust([thruster("azimuth")], (1.0, 0.0, 0.0), beta_t=[(0.9, 0.9), (0.9, 0.9)])
@@ -351,6 +469,11 @@ def test_rejects_loss_factors_of_the_wrong_length(thruster):
 def test_rejects_water_jets(thruster):
     with pytest.raises(ValueError):
         allocate_thrust([thruster("water_jet")], (1.0, 0.0, 0.0))
+
+
+def test_rejects_a_rudder_on_an_azimuth(thruster, rudder):
+    with pytest.raises(ValueError, match="shaft line"):
+        allocate_thrust([thruster("azimuth", rudder=rudder)], (1.0, 0.0, 0.0))
 
 
 def test_rejects_a_load_for_several_headings(thruster):

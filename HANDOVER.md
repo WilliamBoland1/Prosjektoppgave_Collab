@@ -1,6 +1,6 @@
 # Handover: DP capability Level 1 (DNV-ST-0111)
 
-_Last updated 2026-09-28, branch `william`. Written at the end of a Claude Code session with William._
+_Last updated 2026-09-29, branch `william`. Written at the end of a Claude Code session with William._
 
 ## 1. Goal
 
@@ -30,7 +30,8 @@ covered by hand-calculated tests. Level 1 is prescriptive: the formulas
 | 7a | Ventilation loss β_vent and total β_T = β_misc · β_vent | §3.9.4, §3.9.5 | done |
 | 7b | Forbidden zones: user zones + flushing sectors, non-convex allocation | §3.11.2, §3.11.3 | done |
 | 7c | Skeg loss (direction-dependent) + total β_T; star-polygon capacity | §3.11.5, §3.11.6 | done |
-| 7d–e | Refinements: rudders, power | §3.10, §3.12 | **next: 7d** |
+| 7d | Rudders behind shaft lines: `Rudder` (Table A-4), fan + astern pieces | §3.10 | done |
+| 7e | Power | §3.12 | **next** |
 | 8 | Redundancy groups, worst single failure, `DP capability-L1(A,B,C,D)`, report tables | §2.4.7–2.5, App. A | |
 
 Steps 2–3 complete the **load side** of Level 1: for any heading and any
@@ -83,7 +84,16 @@ Step 7c adds the **skeg loss** ([3.11.5]) and completes β_T of [3.11.6] for int
 - **Effect on the test vessel:** the aft azimuths lose up to 43.5% around 141° (AZ1) and 219° (AZ2). 100° and 260° drop from BF 7 to 6; nothing else changes. The lowest numbers stay 6 and 8. The envelope takes about 3.8 s (9 LP combinations per call).
 - Write-up: `Descriptions/skeg_loss.md`. The transcription was checked with William on the 300 dpi crops, and the decisions are in §7.
 
-**Tests:** 197 passing (`tests/test_standard.py`: 7, `tests/models/test_environmental_loads.py`: 51, `tests/models/test_thrust.py`: 59, `tests/models/test_forbidden_zones.py`: 13, `tests/models/test_skeg_loss.py`: 11, `tests/models/test_thruster_allocation.py`: 39, `tests/models/test_capability.py`: 13, `tests/plotting/test_capability_plot.py`: 4). Matplotlib's import prints 14 pyparsing deprecation warnings; they don't come from our code.
+Step 7d adds **rudders** behind shaft line propellers ([3.10]).
+- **Input:** `Thruster.rudder = Rudder(profile, area, max_angle_deg, behind_fixed_nozzle=False)`, the Table A-4 fields. Tables 3-5 (k1) and 3-6 (k2) are in `standard.py`.
+- **Forces:** `rudders.py` gives F_Surge = T(1 − C_x α²) and F_Sway = T·C_y·α ([3.10.1]), with α in degrees, capped at min(maximum, 30°).
+- **Allocation:** a rudder shaft line has two pieces: a convex **fan** of these forces ahead (corners every 1° of α), and **astern along −x only** ([3.10.2]). They are enumerated like the 7b/7c pieces, not joined. Zones and β_skeg are taken at the shaft direction (0°/180°).
+- **Effect:** none on the test vessel (no shaft lines); the envelope is unchanged. On a twin-screw test layout (two shaft lines + the two bow tunnels) the beam number rises from BF 2 to 5, and every heading but 0°/180° rises. The envelope takes 3.1 s instead of 0.6 s.
+- The formulas and tables were checked with William on the p. 34 render (2026-09-29). Write-up: `Descriptions/rudders.md`.
+
+**Where the standard was read from:** `SOURCES.md` (new 2026-09-29) lists every part used so far: PDF text layer or rendered crop, and whether William checked it.
+
+**Tests:** 229 passing (`tests/test_standard.py`: 7, `tests/models/test_environmental_loads.py`: 51, `tests/models/test_thrust.py`: 59, `tests/models/test_rudders.py`: 19, `tests/models/test_forbidden_zones.py`: 13, `tests/models/test_skeg_loss.py`: 11, `tests/models/test_thruster_allocation.py`: 51, `tests/models/test_capability.py`: 14, `tests/plotting/test_capability_plot.py`: 4). Matplotlib's import prints 14 pyparsing deprecation warnings; they don't come from our code.
 
 ## 3. Conventions: read before writing any formula
 
@@ -113,8 +123,9 @@ it into the Level 1 chain.
 
 | File | Contents |
 |---|---|
-| `dp_capability/standard.py` | The conventions docstring and constants. `BeaufortCondition` + `ENVIRONMENT_TABLE` (Table 2-1, BF 0–11; BF 0 has `tp = nan`). `environment(bf)` raises ValueError outside 0–11. `fold_direction()`. Tables 3-1 to 3-4 as dicts, `BETA_MISC`, `K_V1`…`K_V5` |
-| `dp_capability/vessel.py` | `Hull` frozen dataclass matching Table A-2: `loa, lpp, draft, breadth, los, x_los, bow_angle [rad], aw_laft, af_wind, al_wind, xl_air, af_current, al_current, xl_current, skegs`. `Thruster` frozen dataclass matching Table A-3: `name, kind, diameter, power_kw, x, y, z, pitch="FPP", ducted, permanent_magnet, contra_rotating, tunnel_inlet, forbidden_zones=()` (user zones, Table A-6: (start, end) thrust angles in degrees, [3.8.2] convention) |
+| `dp_capability/standard.py` | The conventions docstring and constants. `BeaufortCondition` + `ENVIRONMENT_TABLE` (Table 2-1, BF 0–11; BF 0 has `tp = nan`). `environment(bf)` raises ValueError outside 0–11. `fold_direction()`. Tables 3-1 to 3-4 as dicts, `BETA_MISC`, `K_V1`…`K_V5`. Rudders: `RUDDER_C_Y = 0.0126`, `RUDDER_C_X_FROM_C_Y = 0.02`, `RUDDER_ANGLE_CAP_DEG = 30`, `K1_RUDDER` (Table 3-5), `K2_RUDDER` (Table 3-6) |
+| `dp_capability/vessel.py` | `Hull` frozen dataclass matching Table A-2: `loa, lpp, draft, breadth, los, x_los, bow_angle [rad], aw_laft, af_wind, al_wind, xl_air, af_current, al_current, xl_current, skegs`. `Thruster` frozen dataclass matching Table A-3: `name, kind, diameter, power_kw, x, y, z, pitch="FPP", ducted, permanent_magnet, contra_rotating, tunnel_inlet, forbidden_zones=(), rudder=None` (user zones, Table A-6: (start, end) thrust angles in degrees, [3.8.2] convention). `Rudder` frozen dataclass matching Table A-4: `profile` (Table 3-5 key), `area` (A_r, chord ≤ 1.0D), `max_angle_deg`, `behind_fixed_nozzle=False`; shaft lines only |
+| `dp_capability/models/rudders.py` | `rudder_coefficients(thruster) -> (c_x, c_y)`, `max_rudder_angle_deg(thruster)` = min(max, 30), `rudder_forces(thruster, t_effective, rudder_angle_deg) -> (f_surge, f_sway)` [3.10.1], vectorised over α. `ValueError` without a rudder, on a non-shaft line or for an unknown profile |
 | `dp_capability/config.py` | `HULL`: a made-up ~80 m OSV. `THRUSTERS`: its four actuators (both below). `HEADINGS_DEG`: 0–350° in 10° steps ([2.4.6]) |
 | `dp_capability/models/thrust.py` | `nominal_thrust(thruster, reverse=False)` [N] and `effective_thrust(thruster, reverse=False, beta_t=BETA_MISC)` [N]. Row pickers `_eta1`, `_eta2`, `_eta_m` (rules in §7). `ventilation_loss_factor(thruster, hull, hs, tp, direction_deg, reverse=False)` = β_vent [3.9.4], vectorized over direction, with helpers `_propeller_load_factor`, `_relative_motion_std`. `thrust_loss_factor_level1(...)` = β_misc · β_vent [3.9.5] |
 | `dp_capability/models/windloads.py` | Blendermann (unchanged) + `wind_loads_level1(hull, wind_speed, direction_deg) -> (fx, fy, mz)` |
@@ -123,9 +134,9 @@ it into the Level 1 chain.
 | `dp_capability/models/environmental_loads.py` | `environmental_loads_level1(hull, bf, direction_deg, dynamic_factor=1.25)`: looks up Table 2-1, sums wind + current + waves, multiplies by the dynamic factor |
 | `dp_capability/models/forbidden_zones.py` | `flushing_sectors(thrusters)` ([3.11.3]), `merge_zones(zones)`, `forbidden_zones_level1(thrusters)` (user zones + flushing sectors per thruster = Table A-6 content), `allowed_arcs(zones)` (the arcs between the zones). Degrees, [3.8.2] thrust angles |
 | `dp_capability/models/skeg_loss.py` | `skeg_loss_breakpoints(thruster, skeg)` (Table 3-7/3-8 points in degrees, or None if not applicable), `skeg_loss_factor(thruster, skegs, angle_deg)` (interpolated, minimum over skegs, vectorised). `SKEG_DISTANCE_D_OPEN/DUCTED` = 15 / 8 |
-| `dp_capability/models/thruster_allocation.py` | `allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=True, skegs=()) -> Allocation` (`beta_t`: a (forward, reverse) β_T pair per thruster; None = β_misc) for **one** heading (not vectorized). Azimuth capacity is a star polygon (radius T·β_skeg(θ)) split into convex fans; pass 1 runs per combination of fans. `Allocation` has `fx`, `fy` per actuator [N], `utilisation`, and the properties `feasible` (u ≤ 1 + `TOLERANCE`) and `angle_deg` ([3.8.2], nan when idle). Helpers `_thruster_pieces`, `_polygon_angles`, `_convex_fans`, `_fan_rows`, `_size_rows`, `_place`, `_problem`, `_min_utilisation` (pass 1), `_least_total_thrust` (pass 2), `_solve`; `RAMP_STEP_DEG = 1.0` |
+| `dp_capability/models/thruster_allocation.py` | `allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=True, skegs=()) -> Allocation` (`beta_t`: a (forward, reverse) β_T pair per thruster; None = β_misc) for **one** heading (not vectorized). Azimuth capacity is a star polygon (radius T·β_skeg(θ)) split into convex fans; pass 1 runs per combination of fans. `Allocation` has `fx`, `fy` per actuator [N], `utilisation`, and the properties `feasible` (u ≤ 1 + `TOLERANCE`) and `angle_deg` ([3.8.2], nan when idle). A shaft line with a rudder has two pieces (`_rudder_pieces`: fan ahead, −x astern) and free fy. Helpers `_thruster_pieces`, `_rudder_pieces`, `_no_force`, `_along_x`, `_polygon_angles`, `_convex_fans`, `_fan_rows`, `_size_rows`, `_place`, `_problem`, `_min_utilisation` (pass 1), `_least_total_thrust` (pass 2), `_solve`; `RAMP_STEP_DEG = 1.0`, `RUDDER_STEP_DEG = 1.0` |
 | `dp_capability/models/capability.py` | `capability_numbers_level1(hull, thrusters, headings_deg, ventilation=True, forbidden_zones=True, skeg_loss=True) -> int array` (0–11, same shape as the headings; stops per heading at the first failing BF; β_T per (BF, heading) from the helper `_loss_factors`). `limiting_wind_speed_level1(numbers) -> float array` [m/s] = Table 2-1 wind speed, `ValueError` outside 0–11 |
-| `dp_capability/models/Descriptions/` | Theory write-ups: `windloads.md` (§5 = Level 1), `currentloads.md`, `waveloads.md`, `thrust.md`, `forbidden_zones.md`, `skeg_loss.md`, `thruster_allocation.md`, `capability.md`. Formulas, sign checks, worked examples, code mapping |
+| `dp_capability/models/Descriptions/` | Theory write-ups: `windloads.md` (§5 = Level 1), `currentloads.md`, `waveloads.md`, `thrust.md`, `rudders.md`, `forbidden_zones.md`, `skeg_loss.md`, `thruster_allocation.md`, `capability.md`. Formulas, sign checks, worked examples, code mapping |
 | `dp_capability/plotting/capability_plot.py` | `plot_envelope(headings_deg, values, title=None, r_max=None) -> (fig, ax)`: polar plot, north-up and clockwise ([2.8.2]), loop closed back to the first heading |
 | `main.py` | config → `capability_numbers_level1` → two plots: DP capability number (r_max 11) and limiting wind speed (r_max 32.6 m/s) |
 | `io_utils.py`, `processing/clean.py` | Empty |
@@ -188,9 +199,9 @@ fallback doesn't apply.
 - **Skeg loss** (`Descriptions/skeg_loss.md` §5): the aft azimuths are 4 m aft and 5.5 m outboard of the skeg end (−36, 0), s = 6.80 m < 8D = 24 m.
   - AZ1 loses thrust over 111.20–180° (minimum 0.565 at 140.85°), AZ2 over 180–248.80° (0.565 at 219.15°). The tunnels are exempt.
   - Together with the zones, each azimuth has 3 convex pieces.
-- **Remaining step-7 items:** none apply to this set. It has no rudders (7d) and no power data yet (7e).
+- **Remaining step-7 items:** none apply to this set. It has no shaft lines, so rudders (7d) don't change it, and no power data yet (7e).
 
-## 5. Next step: refinements (step 7d onwards, §3.10, §3.12)
+## 5. Next step: power (step 7e, §3.12)
 
 Step 7 adds everything Level 1 prescribes on top of β_misc. It is too big
 for one step, so do it **one section at a time**, in this order. For each part:
@@ -202,7 +213,10 @@ The text of pages 32–40 was skimmed on 2026-09-22 to plan this.
 **Rendering the PDF:** PyMuPDF is not in `.venv`. A previous session installed
 it in a Claude scratchpad (`…/b59274f0-…/scratchpad/pylib`); put that folder on
 `PYTHONPATH`, or install PyMuPDF into a new scratch folder, and use
-`import pymupdf`.
+`import pymupdf`. Claude Code's Read tool can't render the PDF on this machine
+(no poppler). Earlier renders and where each part came from are listed in
+`SOURCES.md`. The formulas are vector drawings, but Tables 2-1 and 3-1 to 3-6
+and the Appendix A tables are in the text layer (`page.get_text()`).
 
 - **7a. Ventilation, §3.9.4 + §3.9.5: done (2026-09-28).** See §2, §7 and `Descriptions/thrust.md` §6.
   - β_T reaches `allocate_thrust` as a per-thruster `(forward, reverse)` pair. That only works for losses that don't depend on the thrust direction.
@@ -212,13 +226,10 @@ it in a Claude scratchpad (`…/b59274f0-…/scratchpad/pylib`); put that folder
   - An azimuth's capacity is now a general **star polygon** (corners at angle θ, radius T·β_skeg(θ)), split into convex fans by `_convex_fans`. The zones of 7b go through the same machinery.
   - The combinations multiply (3 × 3 = 9 for the test vessel). If a layout makes that slow, `scipy.optimize.milp` is the fallback.
   - §3.11.6's β_flushing,dead (§3.11.4) only exists in failure cases (step 8). It depends on the direction too, so it can reuse the polygon: multiply the radius, interpolated in *Cartesian* coordinates as Figure 3-6 says.
-- **7d. Rudders, §3.10 (start here).**
-  - A rudder behind a shaft line turns its single ±x capacity into a 2-D shape (forces from α ∈ [−30°, 30°]). The star polygon + fans of 7c should carry that: corners from sampling α, one piece or a few.
-  - Only for a rudder behind a propeller giving positive thrust; with negative thrust it is ignored (§3.10.2).
-  - α is in degrees and capped at 30°. Tables 3-5 (k1) and 3-6 (k2).
-  - Needs rudder data (area A_r with chord ≤ 1.0D, profile, nozzle) on the thruster.
-  - `config` has no shaft lines, so the tests need their own layout.
-- **7e. Power, §3.12.**
+- **7d. Rudders, §3.10: done (2026-09-29).** See §2, §7 and `Descriptions/rudders.md`.
+  - A rudder shaft line has two pieces (fan ahead, −x astern), so each one doubles the combinations. The LPs stay small (61 fan corners).
+  - Table A-8's rudder angle and rudder F_surge/F_sway are left for step 8. α follows from fy/fx = C_y α / (1 − C_x α²).
+- **7e. Power, §3.12 (start here).**
   - Operating mode, switchboards and generators (Table A-5).
   - 10% of generated power reserved per redundancy group, with electrical losses included in it (§3.12.3–3.12.4).
   - Batteries: 80–20% SOC for at least 30 min (§3.12.2).
@@ -239,6 +250,8 @@ each sub-step and record the envelope.
   - A dead tunnel may be flushed.
   - Other dead thrusters closer than 8D (open) or 4D (ducted) give an extra loss, interpolated in Cartesian coordinates (Figure 3-6).
 - Table A-7 (loads per heading at its number) and Table A-8 (thruster forces) can be built from `environmental_loads_level1` and `allocate_thrust` at each heading's number.
+  - Table A-8 also asks for the rudder angle and rudder F_surge/F_sway (A.3.5). α follows from a rudder shaft line's force: fy/fx = C_y α / (1 − C_x α²).
+  - Table A-4 asks for the "maximum side force from rudder" as an output: T·C_y·α_max.
 
 ## 7. Decisions and open questions
 
@@ -282,6 +295,13 @@ Decided:
   - **"Above the base line" is z > 0.** Tunnels are exempt. Shaft lines use the factor at 0°/180°.
   - **The "polar" interpolation** is linear in θ between the table points (Figure 3-7), drawn with polygon corners every 1° (`RAMP_STEP_DEG`). The chords are inside the true curve, so the polygon is conservative.
   - **Capacity is a star polygon split into convex fans.** This replaces 7b's "36-gon + cone rows" pieces. Without zones or skeg it is exactly the 36-gon, and with zones only it reproduces 7b to 1e-14. Pass 2 measures |f| with a separate unit 36-gon.
+- **Rudders** (step 7d, agreed with William 2026-09-29; details in `Descriptions/rudders.md` §3):
+  - **k2 comes from an explicit flag**, `Rudder.behind_fixed_nozzle` (Table A-4 lists k2 separately), not from `Thruster.ducted`. A nozzle rudder turns its nozzle, so it gets k2 = 1.0 even on a ducted shaft line.
+  - **A_r is an input**, with the chord already capped at 1.0D.
+  - **α_max = min(maximum rudder angle, 30°).** Positive α gives sway to port (the standard leaves the sign open; the capacity is symmetric).
+  - **Capacity = a fan ahead ∪ the −x segment astern**, as two pieces, not their convex hull: the propeller is either ahead or astern. The fan has corners every 1° of α, on the parabola, so it is conservative.
+  - **Zones and β_skeg use the shaft direction** (0° ahead, 180° astern), as [3.11.3] defines the thrust direction through the propeller shaft.
+  - **Only shaft lines** may have a rudder; anything else raises `ValueError`.
 - **DP capability number** (`capability.py`, [2.2.2], [2.4.4]):
   - Each heading steps up from BF 1 and **stops at the first BF that fails**. The number is the BF before it.
   - u is not assumed to rise monotonically with BF, so a higher BF that happens to balance never counts.
@@ -314,9 +334,10 @@ defined) and compare step by step:
 - **Table A-3** (nominal thrust) for step 4. Can be done now: enter `config.THRUSTERS` and compare against the T_nom column in §4 (377.52 / 377.52 / 135.77 / 126.89 kN). Table A-3 shows one value per thruster, presumably forward;
 - **Table A-6** (forbidden zones) for step 7b. Enter `config.THRUSTERS` and compare the app's forbidden zones with `forbidden_zones_level1(config.THRUSTERS)`: AZ1 69.56–110.44° (in [−180, 180]: 69.56 to 110.44), AZ2 249.56–290.44° (−110.44 to −69.56), none for the tunnels. This also checks our sign reading of [3.11.3].
 - **Skeg loss** for step 7c. The app's numbers at 100°/260° (BF 6 with skeg loss, 7 without) are a direct check of Tables 3-7/3-8 and our readings (§7).
+- **Rudders** (step 7d) can't be compared there, as the app only offers azimuths and tunnels for testing (§7). They rest on the hand-checked tests and the 2026-09-29 check of p. 34.
 - **Table A-8** (thruster forces) for steps 5–7.
   - The §3.11.1 guidance note allows the analysis allocation to differ from the DP system's, and Veracity's method is unknown. Individual thruster forces may therefore differ from ours even when both are right.
-  - Compare the DP capability numbers per heading first. They exist since step 6: run `main.py`, or see the table in `Descriptions/capability.md` §3. Our numbers include ventilation since step 7a (`ventilation=False` gives the β_misc-only envelope). Veracity also includes the remaining step-7 losses (flushing, skeg), so expect our intact numbers to be equal or higher until step 7 is done. A mismatch at 160°/200° (BF 10 with ventilation, 11 without) would point at the ventilation formula or the T_Nominal reading. Then, where the numbers agree, compare which thrusters are at the limit. For the test vessel at beam, our forward group (BT1, BT2) saturates first.
+  - Compare the DP capability numbers per heading first. They exist since step 6: run `main.py`, or see the table in `Descriptions/capability.md` §3. Our numbers include ventilation (7a), forbidden zones and flushing sectors (7b) and the skeg loss (7c), so for this azimuth-and-tunnel vessel the intact numbers should now match. (Flushing of a *dead* thruster, §3.11.4, only matters in failure cases, step 8.) A mismatch at 100°/260° (BF 6 with skeg loss, 7 without) would point at Tables 3-7/3-8. A mismatch at 160°/200° (BF 10 with ventilation, 11 without) would point at the ventilation formula or the T_Nominal reading. Then, where the numbers agree, compare which thrusters are at the limit. For the test vessel at beam, our forward group (BT1, BT2) saturates first.
 
 ## 9. Environment and workflow
 

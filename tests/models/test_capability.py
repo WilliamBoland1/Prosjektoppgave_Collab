@@ -8,7 +8,7 @@ from dp_capability.models.environmental_loads import environmental_loads_level1
 from dp_capability.models.thrust import effective_thrust
 from dp_capability.models.thruster_allocation import allocate_thrust
 from dp_capability.standard import environment
-from dp_capability.vessel import Hull, Thruster
+from dp_capability.vessel import Hull, Rudder, Thruster
 
 HEADINGS = np.arange(0, 360, 10)
 
@@ -128,6 +128,27 @@ def test_skeg_loss_never_raises_a_number(hull, psv):
     without = capability_numbers_level1(skegged, psv(), HEADINGS, skeg_loss=False)
     assert np.all(with_skeg <= without)
     np.testing.assert_array_equal(HEADINGS[with_skeg < without], [100, 160, 200, 260])
+
+
+def test_rudders_never_lower_a_number(hull, thruster):
+    # Twin screw with the psv tunnels. Without rudders only the bow tunnels
+    # give sway, and their yaw moment (lever ~30 m) must be cancelled by
+    # opposite surge from shaft lines only 10 m apart: about 3 times the
+    # tunnel force, which the weaker reversed thrust limits to BF 2 at beam.
+    # With rudders ([3.10.1]) the stern pushes sideways too: BF 5 at beam.
+    def twin_screw(rudder):
+        return [
+            thruster("shaft_line", diameter=3.0, power_kw=2000.0, x=-38.0, y=5.0, rudder=rudder),
+            thruster("shaft_line", diameter=3.0, power_kw=2000.0, x=-38.0, y=-5.0, rudder=rudder),
+            thruster("tunnel", power_kw=900.0, x=31.0, pitch="CPP", tunnel_inlet="rounded"),
+            thruster("tunnel", power_kw=900.0, x=28.0, pitch="CPP", tunnel_inlet="broken"),
+        ]
+
+    with_rudders = capability_numbers_level1(hull, twin_screw(Rudder("naca", 9.0, 35.0)), HEADINGS)
+    without = capability_numbers_level1(hull, twin_screw(None), HEADINGS)
+    assert np.all(with_rudders >= without)
+    assert (without[9], with_rudders[9]) == (2, 5)
+    np.testing.assert_array_equal(with_rudders[1:18], with_rudders[35:18:-1])  # port/starboard symmetric
 
 
 def test_loss_factors_without_ventilation_are_beta_misc(hull, psv):
