@@ -5,6 +5,7 @@ import numpy as np
 from scipy.optimize import linprog
 
 from dp_capability.models.forbidden_zones import allowed_arcs, forbidden_zones_level1
+from dp_capability.models.power import supply_matrix, thruster_power_kw, usable_power_kw
 from dp_capability.models.rudders import max_rudder_angle_deg, rudder_forces
 from dp_capability.models.skeg_loss import skeg_loss_breakpoints, skeg_loss_factor
 from dp_capability.models.thrust import effective_thrust
@@ -22,6 +23,10 @@ RAMP_STEP_DEG = 1.0
 # Rudder angle spacing [deg] of the corners of a shaft line's rudder fan. The
 # [3.10.1] forces lie on a parabola, and the chords between corners inside it.
 RUDDER_STEP_DEG = 1.0
+# Spacing of the thrust fractions r at which the power curve P_B * r^1.5 is
+# drawn as chords. The curve is convex, so the chords lie above it and the
+# power is overestimated, by at most about 0.002 P_B (between r = 0 and 0.05).
+POWER_STEP = 0.05
 
 
 @dataclass(frozen=True)
@@ -30,14 +35,21 @@ class Allocation:
 
     fx: np.ndarray  # surge force from each thruster [N]
     fy: np.ndarray  # sway force from each thruster [N]
-    # The highest force any thruster needs, as a fraction of its effective
-    # thrust (for azimuthing thrusters measured against their capacity
-    # polygon, see allocate_thrust). inf when the thrusters cannot give the load at all.
+    # The highest demand as a fraction of what is available: the largest
+    # thrust_fraction and, with power sources, the largest source power as a
+    # fraction of its usable power. inf when the thrusters cannot give the
+    # load at all.
     utilisation: float
+    # Thrust before losses as a fraction of the nominal thrust in that
+    # direction, i.e. of the effective capacity (the "Utilization %" of
+    # Table A-8). For azimuthing thrusters measured against the capacity polygon.
+    thrust_fraction: np.ndarray
+    power_kw: np.ndarray  # brake power per thruster [kW], P_B * r^1.5 (power.thruster_power_kw)
+    source_power_kw: np.ndarray  # power taken from each power source [kW]; empty without sources
 
     @property
     def feasible(self):
-        """True if the thrusters balance the load within their effective thrust."""
+        """True if the thrusters balance the load within their effective thrust and the usable power."""
         return self.utilisation <= 1 + TOLERANCE
 
     @property
@@ -267,22 +279,42 @@ def _place(blocks, n):
     return np.vstack(rows)
 
 
+def _power_chords():
+    """(slope, intercept) of each chord of r^1.5 between r = 0, POWER_STEP, ..., 1."""
+    r = np.linspace(0.0, 1.0, round(1 / POWER_STEP) + 1)
+    g = r ** 1.5
+    slope = np.diff(g) / np.diff(r)
+    return slope, g[:-1] - slope * r[:-1]
+
+
+@dataclass(frozen=True)
+class _Power:
+    """The power sources of a run, in units of p_ref [kW]."""
+
+    p_b: np.ndarray  # P_B per thruster
+    shares: np.ndarray  # (sources, thrusters), Table A-5
+    usable: np.ndarray  # usable power per source
+
+
 @dataclass(frozen=True)
 class _Problem:
     """One convex allocation problem: every thruster's force in one convex piece."""
 
+    n: int  # number of thrusters
     a_cap: np.ndarray  # capacity rows over the forces
     limits: np.ndarray  # in units of t_ref
-    scales: np.ndarray  # True where the limit is multiplied by u
+    scales: np.ndarray  # True where the limit is multiplied by the thruster's fraction r
+    cap_owner: np.ndarray  # thruster of each capacity row
     a_size: np.ndarray  # size rows over the forces, for pass 2
     size_owner: np.ndarray  # thruster of each size row
     a_eq: np.ndarray
     b_eq: np.ndarray
     f_bounds: list
     t_ref: float
+    power: _Power | None
 
 
-def _problem(thrusters, load, pieces, a_size, size_owner, t_ref):
+def _problem(thrusters, load, pieces, a_size, size_owner, t_ref, power):
     n = len(thrusters)
     a_eq = np.zeros((3, 2 * n))
     a_eq[0, :n] = 1.0
@@ -294,60 +326,110 @@ def _problem(thrusters, load, pieces, a_size, size_owner, t_ref):
     f_bounds = [(0, 0) if t.kind == "tunnel" else (None, None) for t in thrusters]
     f_bounds += [(0, 0) if t.kind == "shaft_line" and t.rudder is None else (None, None) for t in thrusters]
     return _Problem(
+        n=n,
         a_cap=_place([p[0] for p in pieces], n),
         # Forces in units of t_ref, so the LP numbers are of order 1. The
         # moment row then has the lever arms in m.
         limits=np.concatenate([p[1] for p in pieces]) / t_ref,
         scales=np.concatenate([p[2] for p in pieces]),
+        cap_owner=np.concatenate([[i] * len(p[1]) for i, p in enumerate(pieces)]).astype(int),
         a_size=a_size,
         size_owner=size_owner,
         a_eq=a_eq,
         b_eq=-load / t_ref,
         f_bounds=f_bounds,
         t_ref=t_ref,
+        power=power,
     )
 
 
+def _inequalities(p):
+    """
+    The rows a . (f, r, q) + c_u * U <= b shared by both passes, over the
+    forces f (2n), each thruster's fraction r of its capacity (n), and with
+    power sources its power q in units of p_ref (n). Returns (a, c_u, b):
+    - capacity: every force inside r times its piece;
+    - r_i <= U;
+    - with power: q_i >= P_B,i * chord(r_i) for every chord of r^1.5, and
+      the power from each source <= U times its usable power.
+    """
+    n, m = p.n, len(p.limits)
+    n_q = n if p.power else 0
+    cap_r = np.zeros((m, n))
+    cap_r[np.arange(m), p.cap_owner] = -np.where(p.scales, p.limits, 0.0)
+    blocks = [np.column_stack([p.a_cap, cap_r, np.zeros((m, n_q))])]
+    c_u = [np.zeros(m)]
+    b = [np.where(p.scales, 0.0, p.limits)]
+    blocks.append(np.column_stack([np.zeros((n, 2 * n)), np.eye(n), np.zeros((n, n_q))]))
+    c_u.append(-np.ones(n))
+    b.append(np.zeros(n))
+    if p.power:
+        slope, intercept = _power_chords()
+        k = len(slope)
+        rows = np.zeros((k * n, 3 * n + n_q))
+        for i, p_b in enumerate(p.power.p_b):
+            rows[i * k:(i + 1) * k, 2 * n + i] = p_b * slope
+            rows[i * k:(i + 1) * k, 3 * n + i] = -1.0
+        blocks.append(rows)
+        c_u.append(np.zeros(k * n))
+        b.append(np.concatenate([-p_b * intercept for p_b in p.power.p_b]))
+        s = len(p.power.usable)
+        blocks.append(np.column_stack([np.zeros((s, 3 * n)), p.power.shares]))
+        c_u.append(-p.power.usable)
+        b.append(np.zeros(s))
+    return np.vstack(blocks), np.concatenate(c_u), np.concatenate(b)
+
+
 def _min_utilisation(p):
-    """Pass 1, variables (f, u): the lowest u with every force inside u times its capacity. None if impossible."""
-    m, n2 = p.a_cap.shape
+    """Pass 1, variables (f, r, q, U): the lowest U. None if the load cannot be given at all."""
+    a, c_u, b = _inequalities(p)
+    extra = a.shape[1] - 2 * p.n  # r and q
     z = _solve(
-        c=np.r_[np.zeros(n2), 1.0],
-        a_ub=np.column_stack([p.a_cap, -np.where(p.scales, p.limits, 0.0)]),
-        b_ub=np.where(p.scales, 0.0, p.limits),
-        a_eq=np.column_stack([p.a_eq, np.zeros(3)]),
+        c=np.r_[np.zeros(a.shape[1]), 1.0],
+        a_ub=np.column_stack([a, c_u]),
+        b_ub=b,
+        a_eq=np.column_stack([p.a_eq, np.zeros((3, extra + 1))]),
         b_eq=p.b_eq,
-        bounds=p.f_bounds + [(0, None)],
+        bounds=p.f_bounds + [(0, None)] * (extra + 1),
     )
     return None if z is None else max(z[-1], 0.0)
 
 
 def _least_total_thrust(p, utilisation):
-    """Pass 2, variables (f, t): at that u, the lowest total thrust sum(t_i), with t_i >= |f_i|."""
-    m, n2 = p.a_cap.shape
-    n = n2 // 2
+    """Pass 2, variables (f, r, q, t): at that U, the lowest total thrust sum(t_i), with t_i >= |f_i|."""
+    a, c_u, b = _inequalities(p)
+    n, n_var = p.n, a.shape[1]
     k = len(p.size_owner)
     size_t = np.zeros((k, n))
     size_t[np.arange(k), p.size_owner] = -1.0
     z = _solve(
-        c=np.r_[np.zeros(n2), np.ones(n)],
+        c=np.r_[np.zeros(n_var), np.ones(n)],
         a_ub=np.vstack([
-            np.column_stack([p.a_cap, np.zeros((m, n))]),
-            np.column_stack([p.a_size, size_t]),
+            np.column_stack([a, np.zeros((len(b), n))]),
+            np.column_stack([p.a_size, np.zeros((k, n_var - 2 * n)), size_t]),
         ]),
-        b_ub=np.r_[np.where(p.scales, (utilisation + TOLERANCE) * p.limits, p.limits), np.zeros(k)],
-        a_eq=np.column_stack([p.a_eq, np.zeros((3, n))]),
+        b_ub=np.r_[b - c_u * (utilisation + TOLERANCE), np.zeros(k)],
+        a_eq=np.column_stack([p.a_eq, np.zeros((3, n_var - 2 * n + n))]),
         b_eq=p.b_eq,
-        bounds=p.f_bounds + [(0, None)] * n,
+        bounds=p.f_bounds + [(0, None)] * (n_var - 2 * n + n),
     )
     if z is None:
         raise RuntimeError("thrust allocation LP failed: second pass found no solution")
     # Drop solver noise, so an idle thruster gets exactly zero force.
-    f = np.where(np.abs(z[:n2]) < 1e-9, 0.0, z[:n2]) * p.t_ref
+    f = np.where(np.abs(z[:2 * n]) < 1e-9, 0.0, z[:2 * n]) * p.t_ref
     return f[:n], f[n:]
 
 
-def allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=True, skegs=()):
+def _thrust_fractions(p, fx, fy):
+    """Each thruster's fraction r of its capacity piece, from the final forces: the largest a . f / limit."""
+    values = p.a_cap @ (np.r_[fx, fy] / p.t_ref)
+    use = p.scales & (p.limits > 1e-12)
+    r = np.zeros(p.n)
+    np.maximum.at(r, p.cap_owner[use], values[use] / p.limits[use])
+    return r
+
+
+def allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=True, skegs=(), power_sources=None):
     """
     Thruster forces that balance one environmental load, DNV-ST-0111 [2.4.4]
     and [3.11.1]. Forces and moment balance at the same time:
@@ -362,6 +444,13 @@ def allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=Tr
        fraction of its effective thrust [3.9.1]. The load is balanced if u <= 1.
     2. Keep u and minimise the total thrust, so that thrusters with room to
        spare do not push against each other.
+
+    With power sources ([3.12], Table A-5) each source must also supply its
+    thrusters: sum(share * P) <= u * usable power, with P = P_B * r^1.5 per
+    thruster (power.thruster_power_kw, drawn as chords above the curve, so
+    conservative) and 10% of a switchboard's power reserved ([3.12.3]). u is
+    then the higher of the thrust and the power demand, as a fraction of
+    what is available.
 
     Azimuths, pods and cycloidals push in any direction with their forward
     effective thrust T, times the skeg loss factor of that direction
@@ -406,11 +495,16 @@ def allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=Tr
     skegs : sequence of (float, float), optional
         Aft most point of each skeg or gondola (Hull.skegs) for the skeg loss
         of [3.11.5]. Empty: no skeg loss.
+    power_sources : sequence of dp_capability.vessel.PowerSource, optional
+        The switchboards and prime movers of the operating mode ([3.12.1]).
+        Every thruster then needs its power_supply (Table A-5). None: no
+        power limit, each thruster may use its full P_B.
 
     Returns
     -------
     Allocation
-        Force from each thruster and the utilisation. Forces are nan and the
+        Force from each thruster, the utilisation, and each thruster's thrust
+        fraction and power and each source's power. Forces are nan and the
         utilisation inf when the thrusters cannot give the load in any amount
         (e.g. tunnels only against a surge load).
     """
@@ -430,14 +524,26 @@ def allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=Tr
     a_size = _place(sizes, n)
     size_owner = np.concatenate([[i] * len(s) for i, s in enumerate(sizes)])
     t_ref = max(piece[1].max() for pieces in options for piece in pieces) or 1.0
+    power, shares = None, np.zeros((0, n))
+    if power_sources is not None:
+        shares = supply_matrix(thrusters, power_sources)
+        p_ref = max(t.power_kw for t in thrusters) or 1.0
+        power = _Power(
+            p_b=np.array([t.power_kw for t in thrusters]) / p_ref,
+            shares=shares,
+            usable=np.array([usable_power_kw(s) for s in power_sources]) / p_ref,
+        )
 
     best, best_u = None, np.inf
     for pieces in product(*options):
-        p = _problem(thrusters, load, pieces, a_size, size_owner, t_ref)
+        p = _problem(thrusters, load, pieces, a_size, size_owner, t_ref, power)
         u = _min_utilisation(p)
         if u is not None and u < best_u:
             best, best_u = p, u
     if best is None:
-        return Allocation(np.full(n, np.nan), np.full(n, np.nan), np.inf)
+        nan = np.full(n, np.nan)
+        return Allocation(nan, nan, np.inf, nan, nan, np.full(len(shares), np.nan))
     fx, fy = _least_total_thrust(best, best_u)
-    return Allocation(fx, fy, best_u)
+    r = _thrust_fractions(best, fx, fy)
+    power_kw = np.array([thruster_power_kw(t, ri) for t, ri in zip(thrusters, r)])
+    return Allocation(fx, fy, best_u, r, power_kw, shares @ power_kw)

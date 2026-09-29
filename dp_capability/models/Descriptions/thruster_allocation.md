@@ -120,6 +120,16 @@ separate pieces, not joined into their convex hull. The zones and β_skeg are
 taken at the shaft direction (0° for the fan, 180° astern), because [3.11.3]
 defines the thrust direction through the propeller shaft.
 
+### Power limits (step 7e)
+
+With power sources (`power.md`), each thruster gets its own fraction r_i
+of its capacity (`a · f_i ≤ limit · r_i`) with r_i ≤ U, and the rows
+- q_i ≥ P_B,i · chord(r_i) for the chords of r^1.5 (above the curve, so conservative), and
+- Σ_i share_ji · q_i ≤ U · usable_j per source (90% of a switchboard's power, [3.12.3]).
+
+Pass 1 minimises U, so U is the higher of the thrust and the power demand.
+Without sources, U = max r_i, the same optimum as the shared u of before.
+
 ## 3. Checking the signs
 
 - **Head-on load** (Fx < 0, pushed aft): the azimuths push forward, fx > 0, angle 0°.
@@ -170,22 +180,24 @@ moment gives u = 1.007.
 
 ## 4. In the code
 
-- `allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=True, skegs=())` in `dp_capability/models/thruster_allocation.py`:
+- `allocate_thrust(thrusters, load, n_sides=36, beta_t=None, forbidden_zones=True, skegs=(), power_sources=None)` in `dp_capability/models/thruster_allocation.py`:
   - `load` is `(Fx, Fy, Mz)` for **one** heading, e.g. one element of `environmental_loads_level1(...)`. It is not vectorized: step 6 calls it once per heading and BF (432 calls take about 1 s).
   - `n_sides` is the polygon's number of sides. It is a numerical choice, not a value from the standard, so it is a keyword argument and not in `standard.py`.
   - `beta_t` holds one `(forward, reverse)` pair of thrust loss factors per thruster, e.g. from `thrust_loss_factor_level1` (`thrust.md` §6). Forward sets the azimuth polygon and the positive tunnel/shaft limit; reverse sets the negative one. `None` gives β_misc everywhere, and a wrong length raises `ValueError`.
   - The factors are fixed numbers for the LP (T_Nominal of [3.9.2], not the commanded thrust), so the problem stays linear.
   - `forbidden_zones=True` applies `forbidden_zones_level1(thrusters)` (the user zones and the [3.11.3] flushing sectors among the thrusters passed in). `False` ignores them, which gives the single convex problem of before step 7b.
   - `skegs` holds the aft most point of each skeg (`Hull.skegs`) for the [3.11.5] skeg loss. An empty sequence means no skeg loss.
+  - `power_sources` holds the `PowerSource`s of the operating mode (`power.md`); every thruster then needs a `power_supply`. `None` means no power limit.
 - It returns an `Allocation` (frozen dataclass):
   - `fx`, `fy`: force per actuator [N], in the order of `thrusters`;
-  - `utilisation`: u from pass 1 (∞ when the load can't be given);
+  - `utilisation`: U from pass 1 (∞ when the load can't be given);
+  - `thrust_fraction`, `power_kw`: r and P_B · r^1.5 per actuator; `source_power_kw` per source (empty without sources);
   - `feasible`: `utilisation ≤ 1 + TOLERANCE`;
   - `angle_deg`: the [3.8.2] direction per actuator, `nan` for an idle one.
 - Helpers:
   - `_thruster_pieces()` gives each thruster's convex pieces as rows. For azimuths it uses `_polygon_angles()` (corners), `_convex_fans()` (the split) and `_fan_rows()` (edges + rays). A shaft line with a rudder gets its fan and astern segment from `_rudder_pieces()`. Tunnels and other shaft lines have one piece;
   - `_size_rows()` gives the pass-2 size measure, and `_place()` puts per-thruster rows into the full LP matrix;
-  - `_problem()` builds one convex problem, `_min_utilisation()` is pass 1, and `_least_total_thrust()` is pass 2;
+  - `_problem()` builds one convex problem, `_inequalities()` its rows (capacity, r ≤ U, power chords, sources), `_min_utilisation()` is pass 1, `_least_total_thrust()` is pass 2, and `_thrust_fractions()` recomputes r from the forces;
   - `_solve()` wraps `scipy.optimize.linprog` (HiGHS).
 - The worked example in §3 uses β_misc only (no `beta_t`). With ventilation at BF 6, beam, u rises from 0.7445 to about 0.747. The forbidden zones don't change it: both azimuths push well outside their zones. The skeg loss raises it to about 0.759 (AZ2 at ~193° has β_skeg = 0.857; `skeg_loss.md` §5).
-- Not included yet: power limits (step 7e).
+- Every step-7 refinement is in. Failure cases (step 8) will call it with a reduced set of thrusters and sources.

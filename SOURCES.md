@@ -48,10 +48,13 @@ Page numbers are the printed ones, which equal the PDF page numbers.
 | §3.11.5 skeg loss text (15D / 8D, base line) | 37 | Yes | Text | – | `skeg_loss.py` |
 | Tables 3-7 / 3-8 skeg loss factor, s, α_jet, α_flush | 37–38 | **No** (only headings are text) | Rendered 2026-09-28 (`skeg_port.png`, `skeg_stbd.png`, `skeg_p38.png`) | **Yes**, 2026-09-28 | `skeg_loss.py` |
 | §3.11.6 total β_T with skeg | 39 | Formula no | Rendered 2026-09-28 (`p39.png`) | **Yes**, 2026-09-28 | `thruster_allocation.py` |
-| §3.12 power | 39–40 | Yes | Text skimmed 2026-09-22, **not transcribed yet** | Not yet | Step 7e |
+| §2.4.6 guidance note (thrust and power utilisation), §2.4.9 (available power) | 17 | Yes | Text, 2026-09-29 | – (definitions) | `Allocation.thrust_fraction`, `power_kw` |
+| §3.12.1–§3.12.5 power (10% reserve, battery 80–20% SOC / 30 min) | 39–40 | Yes, every value | Text, 2026-09-29 | – (text; decisions agreed 2026-09-29) | `power.py`, `POWER_RESERVE_FRACTION`, `BATTERY_*` |
 | Table A-2 hull data | 71 | Yes | Text and `pages/p71.png` | – (field list) | `vessel.Hull` |
 | Table A-3 actuator data | 72 | Yes | Text and `crops/table_A-3.png` | – (field list) | `vessel.Thruster` |
 | Table A-4 rudder data | 72 | Yes | Text, 2026-09-29 | – (field list) | `vessel.Rudder` |
+| Table A-5 thruster power configuration, A.3.5 run documentation | 73 | Yes | Text, 2026-09-29 | – (field list) | `vessel.PowerSource`, `Thruster.power_supply` |
+| Tables A-8, A-9, A-10 (thruster, power and switchboard results) | 75–77 | Yes | Text, 2026-09-29 | – (column lists) | `Allocation` fields; the tables themselves are step 8 |
 
 ## Gaps worth closing
 

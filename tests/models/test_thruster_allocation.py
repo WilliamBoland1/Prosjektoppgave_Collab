@@ -1,3 +1,4 @@
+import dataclasses
 import math
 
 import numpy as np
@@ -7,7 +8,7 @@ from dp_capability.models.forbidden_zones import forbidden_zones_level1
 from dp_capability.models.skeg_loss import skeg_loss_factor
 from dp_capability.models.thrust import effective_thrust
 from dp_capability.models.thruster_allocation import TOLERANCE, allocate_thrust
-from dp_capability.vessel import Rudder, Thruster
+from dp_capability.vessel import PowerSource, Rudder, Thruster
 
 
 @pytest.fixture
@@ -459,6 +460,73 @@ def test_rudders_share_a_sway_load_with_the_tunnels(twin_screw):
     assert with_rudders.utilisation < without.utilisation
     assert np.any(np.abs(with_rudders.fy[:2]) > 1e3)
     assert without.fy[:2] == pytest.approx([0.0, 0.0], abs=1e-6)
+
+
+def test_power_within_the_bus_leaves_the_utilisation_to_the_thrust(thruster):
+    # P_B = 1000 kW on a 1000 kW switchboard: 900 kW usable ([3.12.3]).
+    # 0.5 T needs r = 0.5 and 0.5^1.5 * 1000 = 353.55 kW, which is 0.393 of
+    # 900 kW, below r: U = 0.5 as without power.
+    azimuth = thruster("azimuth", power_supply=(("SWBD", 1.0),))
+    t = effective_thrust(azimuth)
+    a = allocate_thrust([azimuth], (-0.5 * t, 0.0, 0.0), power_sources=(PowerSource("SWBD", 1000.0),))
+    assert a.utilisation == pytest.approx(0.5)
+    assert a.thrust_fraction == pytest.approx([0.5])
+    assert a.power_kw == pytest.approx([353.553], abs=1e-3)
+    assert a.source_power_kw == pytest.approx([353.553], abs=1e-3)
+
+
+def test_power_limits_a_load_the_thrust_could_balance(thruster):
+    # 0.95 T needs 0.95^1.5 * 1000 = 925.95 kW > 900 kW usable:
+    # U = 925.95 / 900 = 1.0288 (0.95 is a chord point, so no chord error).
+    azimuth = thruster("azimuth", power_supply=(("SWBD", 1.0),))
+    t = effective_thrust(azimuth)
+    load = (-0.95 * t, 0.0, 0.0)
+    a = allocate_thrust([azimuth], load, power_sources=(PowerSource("SWBD", 1000.0),))
+    assert a.utilisation == pytest.approx(0.95 ** 1.5 * 1000 / 900)
+    assert not a.feasible
+    assert allocate_thrust([azimuth], load).utilisation == pytest.approx(0.95)
+
+
+def test_a_weak_bus_moves_load_to_the_other_thruster(thruster):
+    # Two azimuths 40 m apart (> 15D, no flushing) share a surge load T:
+    # 0.5 T each without power. Azimuth A's bus has 250 kW (225 kW usable),
+    # but 0.5 T would need 353.55 kW, so B takes more of the load.
+    a_unit = thruster("azimuth", x=-20.0, power_supply=(("A", 1.0),))
+    b_unit = thruster("azimuth", x=20.0, power_supply=(("B", 1.0),))
+    sources = (PowerSource("A", 250.0), PowerSource("B", 2000.0))
+    t = effective_thrust(a_unit)
+    load = (-t, 0.0, 0.0)
+    a = allocate_thrust([a_unit, b_unit], load, power_sources=sources)
+    assert allocate_thrust([a_unit, b_unit], load).utilisation == pytest.approx(0.5)
+    assert 0.5 < a.utilisation < 1.0
+    assert a.fx[0] < a.fx[1]
+    assert balance_residual([a_unit, b_unit], a, load) == pytest.approx([0.0, 0.0, 0.0], abs=1e-3)
+    # The chords lie above r^1.5, so the true power is within U * usable.
+    assert np.all(a.source_power_kw <= (a.utilisation + 2 * TOLERANCE) * np.array([225.0, 1800.0]))
+
+
+@pytest.mark.parametrize("load", [(-100e3, 0.0, 0.0), (60e3, -150e3, 2e6), (-5.5e3, 358e3, 509e3)])
+def test_a_generous_plant_changes_nothing(psv, load):
+    # 3600 kW per switchboard, 3240 kW usable > 2000 + 900 kW of thrusters.
+    supplied = [dataclasses.replace(t, power_supply=((bus, 1.0),)) for t, bus in zip(psv, ["S1", "S2", "S1", "S2"])]
+    sources = (PowerSource("S1", 3600.0), PowerSource("S2", 3600.0))
+    a = allocate_thrust(supplied, load, power_sources=sources)
+    assert a.utilisation == pytest.approx(allocate_thrust(psv, load).utilisation, abs=1e-8)
+    assert len(a.source_power_kw) == 2
+
+
+def test_power_is_reported_without_sources(thruster):
+    # thrust_fraction and power_kw don't need a power plant; source_power_kw is empty.
+    azimuth = thruster("azimuth")
+    a = allocate_thrust([azimuth], (-0.25 * effective_thrust(azimuth), 0.0, 0.0))
+    assert a.thrust_fraction == pytest.approx([0.25])
+    assert a.power_kw == pytest.approx([125.0])  # 0.25^1.5 * 1000
+    assert a.source_power_kw.shape == (0,)
+
+
+def test_rejects_a_thruster_without_a_power_supply(thruster):
+    with pytest.raises(ValueError, match="no power_supply"):
+        allocate_thrust([thruster("azimuth")], (1.0, 0.0, 0.0), power_sources=(PowerSource("SWBD", 1000.0),))
 
 
 def test_rejects_loss_factors_of_the_wrong_length(thruster):

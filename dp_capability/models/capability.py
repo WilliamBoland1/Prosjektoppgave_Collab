@@ -23,7 +23,8 @@ def _loss_factors(hull, thrusters, condition, headings, ventilation=True):
     ])
 
 
-def capability_numbers_level1(hull, thrusters, headings_deg, ventilation=True, forbidden_zones=True, skeg_loss=True):
+def capability_numbers_level1(hull, thrusters, headings_deg, ventilation=True, forbidden_zones=True, skeg_loss=True,
+                              power_sources=None):
     """
     DP capability number per heading for DP capability level 1, DNV-ST-0111
     [2.2.2], [2.4.4] and [3.2.2].
@@ -39,6 +40,8 @@ def capability_numbers_level1(hull, thrusters, headings_deg, ventilation=True, f
     condition and heading, beta_T = beta_misc * beta_vent ([3.9.5]); the
     allocation respects the forbidden zones of [3.11.2]-[3.11.3] and the
     direction-dependent skeg loss of [3.11.5] (together beta_T of [3.11.6]).
+    With power sources, no source may give more than its usable power
+    ([2.4.9], [3.12]).
 
     Parameters
     ----------
@@ -58,6 +61,9 @@ def capability_numbers_level1(hull, thrusters, headings_deg, ventilation=True, f
         their effect. Level 1 includes them.
     skeg_loss : bool, optional
         False leaves out the skeg loss of hull.skegs. Level 1 includes it.
+    power_sources : sequence of dp_capability.vessel.PowerSource, optional
+        The switchboards and prime movers of the operating mode, see
+        allocate_thrust(). None: no power limit.
 
     Returns
     -------
@@ -76,7 +82,7 @@ def capability_numbers_level1(hull, thrusters, headings_deg, ventilation=True, f
         for i in np.ndindex(headings.shape):
             if holding[i] and not allocate_thrust(
                 thrusters, (fx[i], fy[i], mz[i]), beta_t=beta_t[(..., *i)],
-                forbidden_zones=forbidden_zones, skegs=skegs,
+                forbidden_zones=forbidden_zones, skegs=skegs, power_sources=power_sources,
             ).feasible:
                 numbers[i] = condition.bf - 1
                 holding[i] = False

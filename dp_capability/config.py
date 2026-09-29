@@ -8,7 +8,7 @@ vessel can be entered in DNV's Veracity DP capability app for comparison.
 """
 import math
 
-from dp_capability.vessel import Hull, Thruster
+from dp_capability.vessel import Hull, PowerSource, Thruster
 
 HULL = Hull(
     loa=88.0,
@@ -37,12 +37,25 @@ HULL = Hull(
 # the documented DP power with torque limits, so the 50%-of-MCR fallback of
 # [3.9.2] guidance note 3 does not apply. The two tunnels have different
 # inlets, so that a comparison with Table A-3 in Veracity covers two rows of
-# Table 3-2.
+# Table 3-2. power_supply is the thruster's row of Table A-5 (POWER_SOURCES below).
 THRUSTERS = (
-    Thruster("AZ1", "azimuth", diameter=3.0, power_kw=2000.0, x=-40.0, y=5.5, z=1.8, ducted=True),
-    Thruster("AZ2", "azimuth", diameter=3.0, power_kw=2000.0, x=-40.0, y=-5.5, z=1.8, ducted=True),
-    Thruster("BT1", "tunnel", diameter=2.0, power_kw=900.0, x=31.0, y=0.0, z=2.5, pitch="CPP", tunnel_inlet="rounded"),
-    Thruster("BT2", "tunnel", diameter=2.0, power_kw=900.0, x=28.0, y=0.0, z=2.5, pitch="CPP", tunnel_inlet="broken"),
+    Thruster("AZ1", "azimuth", diameter=3.0, power_kw=2000.0, x=-40.0, y=5.5, z=1.8, ducted=True,
+             power_supply=(("SWBD 1", 1.0),)),
+    Thruster("AZ2", "azimuth", diameter=3.0, power_kw=2000.0, x=-40.0, y=-5.5, z=1.8, ducted=True,
+             power_supply=(("SWBD 2", 1.0),)),
+    Thruster("BT1", "tunnel", diameter=2.0, power_kw=900.0, x=31.0, y=0.0, z=2.5, pitch="CPP", tunnel_inlet="rounded",
+             power_supply=(("SWBD 1", 1.0),)),
+    Thruster("BT2", "tunnel", diameter=2.0, power_kw=900.0, x=28.0, y=0.0, z=2.5, pitch="CPP", tunnel_inlet="broken",
+             power_supply=(("SWBD 2", 1.0),)),
+)
+
+# DP operating mode ([3.12.1]): two switchboards with the bus-tie open, each
+# with 2 x 1800 kW gen-sets running. 90% of 3600 kW = 3240 kW is usable
+# ([3.12.3]), more than the 2000 + 900 = 2900 kW of thrusters on each, so
+# power never limits the intact vessel.
+POWER_SOURCES = (
+    PowerSource("SWBD 1", available_kw=3600.0),
+    PowerSource("SWBD 2", available_kw=3600.0),
 )
 
 # Environment directions of the capability plot [deg]. [2.4.6] asks for at

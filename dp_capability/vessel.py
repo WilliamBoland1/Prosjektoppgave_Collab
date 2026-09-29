@@ -75,3 +75,24 @@ class Thruster:
     # The flushing sectors of [3.11.3] are added automatically.
     forbidden_zones: tuple[tuple[float, float], ...] = ()
     rudder: Rudder | None = None  # shaft lines only, Table A-4 and [3.10]
+    # Where the thruster takes its power from, the thruster's row of Table
+    # A-5: (PowerSource name, share) pairs with the shares summing to 1, e.g.
+    # (("SWBD 1", 1.0),). Only needed when the run has power sources.
+    power_supply: tuple[tuple[str, float], ...] = ()
+
+
+@dataclass(frozen=True)
+class PowerSource:
+    """
+    A switchboard (bus) or a prime mover that supplies thrusters in the DP
+    operating mode, one column of DNV-ST-0111 Table A-5 ([3.12.1]).
+    Switchboards joined by a closed bus-tie are one source.
+    """
+
+    name: str  # e.g. "SWBD 1" or "PM1"
+    # Power available in the operating mode [kW]: the running gen-sets, plus
+    # battery power from dp_capability.models.power.battery_power_kw() [3.12.2].
+    available_kw: float
+    # True for a switchboard: 10% of its power is reserved [3.12.3]. False for
+    # a prime mover driving a propeller directly.
+    electrical: bool = True

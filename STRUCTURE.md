@@ -39,11 +39,13 @@ dp_capability/                          The Python package containing all
                                          environment, the thrust efficiency
                                          Tables 3-1 to 3-4, beta_misc, the
                                          ventilation coefficients k_V1-k_V5
-                                         and the rudder coefficients (Tables
-                                         3-5/3-6).
+                                         the rudder coefficients (Tables
+                                         3-5/3-6), the 10% power reserve and
+                                         the battery rules ([3.12]).
 ├── vessel.py                           Data containers for vessel input
                                          (Hull = Table A-2, Thruster =
-                                         Table A-3, Rudder = Table A-4).
+                                         Table A-3, Rudder = Table A-4,
+                                         PowerSource = a Table A-5 column).
                                          The values for a vessel
                                          live in config.py.
 │
@@ -75,6 +77,10 @@ dp_capability/                          The Python package containing all
 │   │                                    actuator ([3.9]): Tables 3-1 to 3-4,
 │   │                                    beta_misc, the ventilation loss
 │   │                                    beta_vent and the total beta_T.
+│   ├── power.py                        Thruster power at part thrust
+│   │                                    (P_B * r^1.5 from [3.9.2]), battery
+│   │                                    power, usable switchboard power and
+│   │                                    the Table A-5 supply shares ([3.12]).
 │   ├── rudders.py                      Force of a shaft line propeller
 │   │                                    with the rudder behind it ([3.10],
 │   │                                    Tables 3-5/3-6).
@@ -105,6 +111,7 @@ dp_capability/                          The Python package containing all
 │       ├── waveloads.md
 │       ├── thrust.md
 │       ├── rudders.md
+│       ├── power.md
 │       ├── forbidden_zones.md
 │       ├── skeg_loss.md
 │       ├── thruster_allocation.md
@@ -143,6 +150,7 @@ tests/                                  Automated tests, mirroring the
 │   │                                    environmental_loads.py.
 │   ├── test_thrust.py                  Tests for thrust.py.
 │   ├── test_rudders.py                 Tests for rudders.py.
+│   ├── test_power.py                   Tests for power.py.
 │   ├── test_forbidden_zones.py         Tests for forbidden_zones.py.
 │   ├── test_skeg_loss.py               Tests for skeg_loss.py.
 │   ├── test_thruster_allocation.py     Tests for thruster_allocation.py.

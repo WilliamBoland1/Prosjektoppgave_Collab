@@ -8,7 +8,7 @@ from dp_capability.models.environmental_loads import environmental_loads_level1
 from dp_capability.models.thrust import effective_thrust
 from dp_capability.models.thruster_allocation import allocate_thrust
 from dp_capability.standard import environment
-from dp_capability.vessel import Hull, Rudder, Thruster
+from dp_capability.vessel import Hull, PowerSource, Rudder, Thruster
 
 HEADINGS = np.arange(0, 360, 10)
 
@@ -149,6 +149,25 @@ def test_rudders_never_lower_a_number(hull, thruster):
     assert np.all(with_rudders >= without)
     assert (without[9], with_rudders[9]) == (2, 5)
     np.testing.assert_array_equal(with_rudders[1:18], with_rudders[35:18:-1])  # port/starboard symmetric
+
+
+def test_power_limits_only_where_the_plant_is_too_small(hull, psv):
+    # Two switchboards, SWBD 1 = port azimuth + first tunnel, SWBD 2 the others:
+    # 2000 + 900 = 2900 kW of thrusters on each.
+    # - 3600 kW each: 3240 kW usable > 2900 kW, so power never limits.
+    # - 3000 kW each: 2700 kW usable < 2900 kW. Only 100 and 260 deg drop
+    #   (BF 7 -> 6); there BF 7 needs every thruster near full thrust.
+    thrusters = [dataclasses.replace(t, power_supply=((bus, 1.0),))
+                 for t, bus in zip(psv(), ["SWBD 1", "SWBD 2", "SWBD 1", "SWBD 2"])]
+
+    def plant(kw):
+        return (PowerSource("SWBD 1", kw), PowerSource("SWBD 2", kw))
+
+    without = capability_numbers_level1(hull, thrusters, HEADINGS)
+    np.testing.assert_array_equal(capability_numbers_level1(hull, thrusters, HEADINGS, power_sources=plant(3600.0)), without)
+    small = capability_numbers_level1(hull, thrusters, HEADINGS, power_sources=plant(3000.0))
+    assert np.all(small <= without)
+    np.testing.assert_array_equal(HEADINGS[small < without], [100, 260])
 
 
 def test_loss_factors_without_ventilation_are_beta_misc(hull, psv):

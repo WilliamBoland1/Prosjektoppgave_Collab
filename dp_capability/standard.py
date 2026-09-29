@@ -84,6 +84,14 @@ K2_RUDDER = {  # Table 3-6, rudder/nozzle arrangement
     "other": 1.0,  # all other arrangements
     "fixed_nozzle": 1.15,  # rudder behind a fixed propeller nozzle
 }
+# Share of electrical generated power reserved for hotel and consumers not
+# part of the thruster system, electrical losses included, [3.12.3]-[3.12.4].
+POWER_RESERVE_FRACTION = 0.10
+# Battery power: used from 80% to 20% state of charge (at beginning of life),
+# for at least 30 minutes, [3.12.2].
+BATTERY_SOC_HIGH = 0.8
+BATTERY_SOC_LOW = 0.2
+BATTERY_MIN_HOURS = 0.5
 
 
 @dataclass(frozen=True)

@@ -6,7 +6,9 @@ from dp_capability.plotting.capability_plot import plot_envelope
 from dp_capability.standard import ENVIRONMENT_TABLE
 
 if __name__ == "__main__":
-    numbers = capability_numbers_level1(config.HULL, config.THRUSTERS, config.HEADINGS_DEG)
+    numbers = capability_numbers_level1(
+        config.HULL, config.THRUSTERS, config.HEADINGS_DEG, power_sources=config.POWER_SOURCES,
+    )
 
     # [2.4.2]: one plot in DP capability numbers and one in limiting wind speed.
     plot_envelope(
